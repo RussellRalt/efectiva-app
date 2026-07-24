@@ -26,6 +26,38 @@ body {
   flex-direction: column;
 }
 
+/* Acceso a cuenta */
+.auth-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(8, 12, 25, .88);
+}
+.auth-card {
+  width: min(100%, 410px);
+  padding: 30px;
+  border: 1px solid #505a78;
+  border-radius: 18px;
+  background: #20263a;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
+  text-align: center;
+}
+.auth-logo { color: #fff; background: #2563eb; width: 42px; height: 42px; margin: 0 auto 13px; display: grid; place-items: center; border-radius: 50%; font-weight: bold; font-size: 22px; }
+.auth-card h2 { margin-bottom: 8px; }
+.auth-subtitle { color: #cbd5e1; line-height: 1.45; margin-bottom: 22px; }
+.auth-card form { display: grid; gap: 8px; text-align: left; }
+.auth-card label { font-size: .9rem; color: #dbeafe; }
+.auth-card input { width: 100%; padding: 12px; margin-bottom: 7px; border: 1px solid #5f6b88; background: #111827; color: #fff; border-radius: 8px; font-size: 1rem; }
+.auth-card button[type="submit"] { margin-top: 7px; padding: 12px; border: 0; border-radius: 8px; color: #fff; font-size: 1rem; font-weight: bold; cursor: pointer; background: #2563eb; }
+.auth-card button[type="submit"]:disabled { opacity: .65; cursor: wait; }
+.auth-message { min-height: 22px; margin: 13px 0 5px; color: #fcd34d; font-size: .9rem; }
+.auth-link { border: 0; background: transparent; color: #93c5fd; cursor: pointer; font-size: .92rem; }
+
+
 /* Variables de ejemplo para personalizar elementos (opcional) */
 :root {
   --task-bg: #3a3a3a;

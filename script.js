@@ -101,15 +101,36 @@ const confirmNoBtn = document.getElementById('confirmNoBtn');
 /************************************************************************
  * EVENTOS DE CARGA
  ************************************************************************/
-window.addEventListener('load', () => {
+let efectivaInitialized = false;
+
+async function initializeEfectiva() {
+  if (efectivaInitialized || !window.EfectivaCloud?.user) return;
+  efectivaInitialized = true;
   loadDataFromLocalStorage();
+
+  try {
+    const cloudData = await window.EfectivaCloud.loadData();
+    if (cloudData && Array.isArray(cloudData.folders)) {
+      folders = cloudData.folders;
+      trash = cloudData.trash || [];
+      localStorage.setItem('foldersDataV4', JSON.stringify({ folders, trash }));
+    } else {
+      window.EfectivaCloud.scheduleSave({ folders, trash });
+    }
+  } catch (error) {
+    console.error('No se pudo cargar la nube:', error.message);
+  }
+
   ensureRewardsFolder();
   applyTheme(currentTheme);
   renderFolders();
   cleanOldTrashItems();
   window.addEventListener('popstate', handlePopState);
   setInterval(checkAlarms, 60 * 1000);
-});
+}
+
+window.addEventListener('load', initializeEfectiva);
+window.addEventListener('efectiva:authenticated', initializeEfectiva);
 
 newFolderInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
@@ -2929,7 +2950,9 @@ function closeMoveModal() {
  * LOCALSTORAGE
  ************************************************************************/
 function saveDataToLocalStorage() {
-  localStorage.setItem('foldersDataV4', JSON.stringify({ folders, trash }));
+  const payload = { folders, trash };
+  localStorage.setItem('foldersDataV4', JSON.stringify(payload));
+  window.EfectivaCloud?.scheduleSave(payload);
 }
 
 function loadDataFromLocalStorage() {
