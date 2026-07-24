@@ -82,9 +82,29 @@ section {
   flex-shrink: 0;
 }
 header {
-  background-color: #333;
+  background: linear-gradient(135deg, #0e234a 0%, #142f61 55%, #174372 100%);
   text-align: center;
   padding: 1rem;
+  border-bottom: 1px solid rgba(91, 211, 233, .22);
+}
+.app-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  font-size: 1.35rem;
+  letter-spacing: -.02em;
+}
+.app-brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  color: #06224a;
+  background: linear-gradient(145deg, #35d9df, #559cff);
+  font-size: .95rem;
+  font-weight: 800;
+  box-shadow: 0 4px 14px rgba(44, 194, 226, .32);
 }
 
 /* TOP ICON BAR */
