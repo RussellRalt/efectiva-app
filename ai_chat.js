@@ -25,7 +25,9 @@
       apiKey:  localStorage.getItem(STORAGE_KEY)  || '',
       model:   localStorage.getItem(STORAGE_MODEL) || DEFAULT_MODEL,
       baseUrl: localStorage.getItem(STORAGE_BASE)  || DEFAULT_BASE,
-      maxToolIterations: 8,
+      // Protección contra bucles defectuosos. 50 ciclos cubre tareas largas
+      // (muchos pasos) sin interrumpir el flujo normal del usuario.
+      maxToolIterations: 50,
     };
   }
   let AI_CONFIG = loadAIConfig();
@@ -1237,7 +1239,7 @@ IMPORTANTE:
       break;
     }
     if (!lastAssistantText && iterations >= AI_CONFIG.maxToolIterations) {
-      lastAssistantText = '⚠️ Alcanzé el máximo de iteraciones.';
+      lastAssistantText = '⚠️ La IA realizó demasiadas acciones seguidas y se detuvo para evitar un bucle. Revisá los cambios aplicados e indicame cómo continuar.';
     }
     return { text: lastAssistantText, tools: toolTrace, history: trimHistory(messages) };
   }
