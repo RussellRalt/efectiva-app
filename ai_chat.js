@@ -25,9 +25,6 @@
       apiKey:  localStorage.getItem(STORAGE_KEY)  || '',
       model:   localStorage.getItem(STORAGE_MODEL) || DEFAULT_MODEL,
       baseUrl: localStorage.getItem(STORAGE_BASE)  || DEFAULT_BASE,
-      // Protección contra bucles defectuosos. 50 ciclos cubre tareas largas
-      // (muchos pasos) sin interrumpir el flujo normal del usuario.
-      maxToolIterations: 50,
     };
   }
   let AI_CONFIG = loadAIConfig();
@@ -1203,7 +1200,9 @@ IMPORTANTE:
     const toolTrace = [];
     let iterations = 0;
     let lastAssistantText = '';
-    while (iterations < AI_CONFIG.maxToolIterations) {
+    // Sin límite artificial: continúa mientras el modelo solicite herramientas.
+    // Se detiene solo cuando el modelo entrega una respuesta final o la API devuelve un error real.
+    while (true) {
       iterations++;
       let data;
       try { data = await callOpenRouter(messages); }
@@ -1238,9 +1237,6 @@ IMPORTANTE:
       lastAssistantText = assistantMsg.content || '';
       break;
     }
-    if (!lastAssistantText && iterations >= AI_CONFIG.maxToolIterations) {
-      lastAssistantText = '⚠️ La IA realizó demasiadas acciones seguidas y se detuvo para evitar un bucle. Revisá los cambios aplicados e indicame cómo continuar.';
-    }
     return { text: lastAssistantText, tools: toolTrace, history: trimHistory(messages) };
   }
 
@@ -1254,6 +1250,8 @@ IMPORTANTE:
   // --------------------------------------------------------------------------
   let chats = [];
   let currentChatId = null;
+  let chatCloudReady = false;
+  let chatCloudSaveTimer = null;
   let skills = [];
   let activeTab = 'history';
   let sidebarOpen = true;
@@ -1263,9 +1261,41 @@ IMPORTANTE:
     try { chats = JSON.parse(localStorage.getItem(STORAGE.chats) || '[]'); } catch (e) { chats = []; }
     if (!Array.isArray(chats)) chats = [];
   }
-  function saveChats() { localStorage.setItem(STORAGE.chats, JSON.stringify(chats)); }
+  function scheduleCloudChatSave() {
+    if (!chatCloudReady || !window.EfectivaCloud?.user) return;
+    clearTimeout(chatCloudSaveTimer);
+    chatCloudSaveTimer = setTimeout(() => {
+      window.EfectivaCloud.saveAIChats(chats, currentChatId)
+        .catch(error => console.error('No se pudo sincronizar el historial IA:', error.message));
+    }, 500);
+  }
+  function saveChats() {
+    localStorage.setItem(STORAGE.chats, JSON.stringify(chats));
+    scheduleCloudChatSave();
+  }
   function loadCurrentId() { currentChatId = localStorage.getItem(STORAGE.current) || null; }
-  function saveCurrentId() { if (currentChatId) localStorage.setItem(STORAGE.current, currentChatId); }
+  function saveCurrentId() {
+    if (currentChatId) localStorage.setItem(STORAGE.current, currentChatId);
+    scheduleCloudChatSave();
+  }
+  async function hydrateChatsFromCloud(render) {
+    if (!window.EfectivaCloud?.user || !window.EfectivaCloud?.loadAIChats) return;
+    try {
+      const cloud = await window.EfectivaCloud.loadAIChats();
+      if (cloud && Array.isArray(cloud.chats) && cloud.chats.length) {
+        chats = cloud.chats;
+        currentChatId = cloud.currentChatId || chats[0].id;
+        localStorage.setItem(STORAGE.chats, JSON.stringify(chats));
+        if (currentChatId) localStorage.setItem(STORAGE.current, currentChatId);
+      }
+      chatCloudReady = true;
+      if (!cloud || !Array.isArray(cloud.chats) || cloud.chats.length === 0) scheduleCloudChatSave();
+      if (render) render();
+    } catch (error) {
+      console.error('No se pudo cargar el historial IA:', error.message);
+      chatCloudReady = true;
+    }
+  }
   function loadSkills() {
     try { skills = JSON.parse(localStorage.getItem(STORAGE.skills) || '[]'); } catch (e) { skills = null; }
     if (!Array.isArray(skills) || skills.length === 0) { skills = DEFAULT_SKILLS.slice(); saveSkills(); }
@@ -1994,6 +2024,10 @@ IMPORTANTE:
       isMobile = window.innerWidth <= 540;
       if (wasMobile !== isMobile) applySidebarState();
     });
+
+    // Reemplaza el historial local por el historial privado de la cuenta al iniciar sesión.
+    // Hasta que esto termina, ningún chat local se escribe sobre la nube.
+    hydrateChatsFromCloud(renderAll);
   }
 
   function formatDate(ts) {

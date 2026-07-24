@@ -93,15 +93,40 @@
   function scheduleSave(payload) {
     clearTimeout(syncTimer);
     syncTimer = setTimeout(async () => {
-      try { await saveData(payload); }
+      try {
+        const current = await loadData() || {};
+        // Conserva el historial IA ya sincronizado al guardar tareas y carpetas.
+        await saveData({ ...current, ...payload });
+      }
       catch (error) { console.error('No se pudo sincronizar Efectiva:', error.message); }
     }, 700);
+  }
+
+  // El historial se guarda dentro del mismo registro privado del usuario.
+  // Así no existe una tabla pública adicional ni se mezclan datos entre cuentas.
+  async function loadAIChats() {
+    const data = await loadData();
+    return data && Array.isArray(data.aiChats)
+      ? { chats: data.aiChats, currentChatId: data.aiCurrentChatId || null }
+      : null;
+  }
+
+  async function saveAIChats(chats, currentChatId) {
+    if (!currentUser) return;
+    const current = await loadData() || {};
+    await saveData({
+      ...current,
+      aiChats: chats,
+      aiCurrentChatId: currentChatId || null
+    });
   }
 
   window.EfectivaCloud = {
     get user() { return currentUser; },
     loadData,
     scheduleSave,
+    loadAIChats,
+    saveAIChats,
     async signOut() { await client.auth.signOut(); }
   };
 
