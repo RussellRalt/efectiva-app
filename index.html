@@ -4,6 +4,11 @@
   <meta charset="UTF-8" />
   <title>Gestor de Tareas</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Efectiva" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="stylesheet" href="style.css?v=1002" />
   <link rel="manifest" href="manifest.json" />
   <!-- Librería ligera para captura de elementos en imagen PNG HD -->
@@ -230,6 +235,11 @@
   <!-- Script principal -->
   <script src="script.js?v=1017"></script>
   <script src="ai_chat.js?v=1016"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+    }
+  </script>
   <script>
     document.querySelectorAll('.restore-btn').forEach(button => {
         button.addEventListener('click', function() {
