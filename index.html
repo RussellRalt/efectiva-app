@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gestor de Tareas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css?v=1002" />
+  <link rel="manifest" href="manifest.json" />
+  <!-- Librería ligera para captura de elementos en imagen PNG HD -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+  <!-- SECCIÓN CARPETAS -->
+  <section id="foldersSection">
+    <header>
+      <h1>Gestor de Tareas</h1>
+    </header>
+
+    <!-- Contenedor de íconos (tema, importar, papelera) -->
+    <div class="top-icon-bar">
+      <!-- Botón de tema -->
+      <button id="themeButton" class="icon-button" title="Cambiar tema">🌙</button>
+
+      <!-- Botón importar JSON -->
+      <label for="importFileInput" class="icon-button" id="importJsonBtn" title="Importar JSON">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="18" height="18" fill="currentColor">
+          <path d="M169.4 470.6c4.5 4.5 10.6 7.4 17 7.4s12.5-2.9 17-7.4l160-160c9.2-9.2 12-22.9 7-34.9s-16.6-19.4-29-19.4H272V64c0-17.7-14.3-32-32-32H144c-17.7 0-32 14.3-32 32V256H29.7c-12.4 0-23.5 7.6-28.5 19.4s-2.2 25.7 7 34.9l160 160z"/>
+        </svg>
+      </label>
+      <input type="file" id="importFileInput" accept="application/json" style="display: none;" />
+
+      <!-- Botón de papelera -->
+      <button id="trashButton" class="icon-button" title="Ver papelera">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="18" height="18" fill="currentColor">
+          <path d="M160 400C160 408.8 152.8 416 144 416C135.2 416 128 408.8 128 400V240C128 231.2 135.2 224 144 224C152.8 224 160 231.2 160 240V400zM256 240C256 231.2 263.2 224 272 224C280.8 224 288 231.2 288 240V400C288 408.8 280.8 416 272 416C263.2 416 256 408.8 256 400V240zM0 80C0 62.33 14.33 48 32 48H80L96.38 34C103.2 27.12 112.3 23.1 121.9 23.1H326.1C335.7 23.1 344.8 27.12 351.6 34L368 48H416C433.7 48 448 62.33 448 80C448 97.67 433.7 112 416 112H32C14.33 112 0 97.67 0 80zM32.11 160H415.9C419.8 160 423.5 161.7 426.2 164.4C428.8 167.1 430.7 170.8 431 174.8L416 464C416 490.5 394.5 512 368 512H80C53.49 512 32 490.5 32 464L16.1 174.8C17.21 168.1 24.56 160 32.11 160z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Input para crear carpeta con Enter -->
+    <div class="new-folder">
+      <input type="text" id="newFolderInput" class="new-folder-input" placeholder="Agrega una carpeta (Enter)..." />
+    </div>
+
+    <!-- Contenedor de carpetas -->
+    <div class="folder-container" id="folderContainer">
+      <!-- Carpetas generadas dinámicamente -->
+    </div>
+  </section>
+
+  <!-- SECCIÓN TAREAS -->
+  <section id="tasksSection" style="display: none;">
+    <header>
+      <h2 id="tasksTitle">Carpeta</h2>
+    </header>
+
+    <div class="tasks-container">
+      <!-- Selector Unificado de Modo de Creación (Tarea / Nota) -->
+      <div class="creation-mode-toggle">
+        <button id="modeTabTask" class="mode-tab active" type="button">☑ Tarea</button>
+        <button id="modeTabNote" class="mode-tab" type="button">📝 Nota</button>
+      </div>
+
+      <!-- Contenedor Unificado de Creación -->
+      <div id="unifiedCreationArea" class="unified-creation-area">
+        <!-- Modo Tarea -->
+        <div id="taskCreationForm" class="new-task">
+          <input type="text" id="newTaskInput" placeholder="Agrega una tarea (Enter)..." />
+          <input type="number" id="newTaskTimeInput" placeholder="Tiempo (min) (opcional)" min="0" />
+        </div>
+
+        <!-- Modo Nota -->
+        <div id="noteCreationForm" class="new-note-form" style="display: none;">
+          <input type="text" id="newNoteTitleInput" class="new-note-title" placeholder="Título de la nota..." autocomplete="off" />
+          <textarea id="newNoteContentInput" class="new-note-content" rows="3" placeholder="Escribí el contenido de la nota aquí..."></textarea>
+          <div class="new-note-actions">
+            <button id="saveNewNoteBtn" class="save-note-btn" type="button">💾 Guardar Nota</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Listado Único Unificado de Elementos (Tareas y Notas) -->
+      <h3 class="subheading">Tareas y Notas</h3>
+      <div id="tasksList" class="tasks-list"></div>
+
+      <!-- Mini Carpeta Fija para tareas finalizadas -->
+      <div id="completedMiniFolder" class="mini-folder-container">
+        <div class="mini-folder-icon" title="Tareas Finalizadas">📁</div>
+        <div id="completedMiniFolderList" class="tasks-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECCIÓN PAPELERA -->
+  <section id="trashSection" style="display: none;">
+    <header>
+      <h2>Papelera</h2>
+    </header>
+    <div id="trashList" class="trash-list"></div>
+  </section>
+
+  <!-- MODAL DE PRESENTACIÓN -->
+  <div class="presentation-modal" id="presentationModal">
+    <div class="presentation-content">
+      <div class="presentation-header-bar">
+        <button id="presentationAudioCoachBtn" class="audio-coach-btn" title="Activar/Desactivar voz hablada Audio-Coach">📣 Voz ON</button>
+      </div>
+      <!-- Contenedor para la lista de pasos de la presentación -->
+      <div id="presentationStepsContainer">
+        <ul id="presentationStepsList"></ul>
+      </div>
+      <div class="presentation-step" id="presentationStep"></div>
+      <div class="timer" id="timerDisplay">00:00</div>
+    </div>
+  </div>
+
+  <!-- MODAL DE ASIGNAR FECHA/HORA -->
+  <div class="schedule-modal" id="scheduleModal">
+    <div class="schedule-content">
+      <h2>Agendar Tarea</h2>
+      <label for="scheduleDateInput">Fecha y hora:</label>
+      <input type="datetime-local" id="scheduleDateInput" />
+      <div class="schedule-buttons">
+        <button id="saveScheduleBtn">Guardar</button>
+        <button id="cancelScheduleBtn">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE ALARMA -->
+  <div class="alarm-modal" id="alarmModal">
+    <div class="alarm-content">
+      <h2 id="alarmTitle">¡Es hora de tu tarea!</h2>
+      <button id="disableAlarmBtn">Desactivar</button>
+    </div>
+  </div>
+
+  <!-- SECCIÓN RECOMPENSA -->
+  <!-- (La sección de recompensa con input ya no se usa. Las recompensas se crean/editan dentro de la carpeta "Recompensas") -->
+  <section id="rewardSection" style="display: none;">
+    <header>
+      <h2>Registra tu Recompensa</h2>
+    </header>
+    <div class="reward-container">
+      <input type="text" id="rewardInput" placeholder="Describe tu recompensa y presiona Enter..." />
+    </div>
+  </section>
+
+  <!-- MODAL DE MOVER TAREA -->
+  <div class="move-modal" id="moveModal">
+    <div class="move-content">
+      <h2>Mover Tarea</h2>
+      <label for="targetFolderSelect">Selecciona carpeta de destino:</label>
+      <select id="targetFolderSelect"></select>
+      <div class="move-buttons">
+        <button id="confirmMoveBtn">Mover</button>
+        <button id="cancelMoveBtn">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE CONFIRMACIÓN PERSONALIZADO -->
+  <div class="confirm-modal" id="confirmModal" style="display: none;">
+    <div class="confirm-content">
+      <p id="confirmMessage">¿Estás seguro?</p>
+      <div class="confirm-buttons">
+        <button id="confirmYesBtn">Sí</button>
+        <button id="confirmNoBtn">No</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT IA FLOTANTE v2 -->
+  <button id="aiFab" class="ai-fab" title="Asistente IA">🤖</button>
+  <div id="aiPanel" class="ai-panel" style="display: none;">
+    <div class="ai-header">
+      <button id="aiSidebarToggle" class="ai-icon-btn" title="Mostrar / ocultar panel">☰</button>
+      <span id="aiChatTitle" class="ai-chat-title" title="Click para renombrar">Nuevo chat</span>
+      <button id="aiSettingsBtn" class="ai-icon-btn" title="Configurar API key de IA">⚙</button>
+      <button id="aiCloseBtn" class="ai-icon-btn" title="Cerrar">✕</button>
+    </div>
+    <div class="ai-body">
+      <aside id="aiSidebar" class="ai-sidebar">
+        <div class="ai-tabs">
+          <button class="ai-tab active" data-tab="history" title="Historial">💬</button>
+          <button class="ai-tab" data-tab="skills" title="Skills">📋</button>
+        </div>
+        <div class="ai-tab-content" data-tab="history">
+          <button id="aiNewChatBtn" class="ai-new-btn" title="Nuevo chat">+ Nuevo chat</button>
+          <div id="aiHistoryList" class="ai-list"></div>
+        </div>
+        <div class="ai-tab-content hidden" data-tab="skills">
+          <button id="aiNewSkillBtn" class="ai-new-btn" title="Nuevo skill">+ Nuevo skill</button>
+          <div id="aiSkillsList" class="ai-list"></div>
+        </div>
+      </aside>
+      <main class="ai-main">
+        <div id="aiMessages" class="ai-messages"></div>
+        <div class="ai-input-row">
+          <button id="aiUnifiedVoiceBtn" class="ai-unified-voice-btn" title="Activar/Desactivar Modo Hablado Manos Libres Continuo">🎙️</button>
+          <textarea id="aiInput" rows="1" placeholder="Hablá o escribí un mensaje..." autocomplete="off"></textarea>
+          <button id="aiSendBtn" class="ai-send" title="Enviar mensaje">➤</button>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- MODAL CREAR/EDITAR SKILL -->
+  <div id="aiSkillModal" class="ai-modal" style="display: none;">
+    <div class="ai-modal-content">
+      <h3 id="aiSkillModalTitle">Nuevo skill</h3>
+      <label>Nombre</label>
+      <input id="aiSkillName" type="text" placeholder="Ej: Planificar el día" maxlength="40" />
+      <label>Ícono (un emoji)</label>
+      <input id="aiSkillIcon" type="text" placeholder="⚡" maxlength="2" />
+      <label>Prompt (lo que se le envía al asistente)</label>
+      <textarea id="aiSkillPrompt" rows="4" placeholder="Ej: Armame un plan para mañana con mis tareas pendientes, ordenado por prioridad."></textarea>
+      <div class="ai-modal-buttons">
+        <button id="aiSkillCancelBtn" class="ai-modal-cancel">Cancelar</button>
+        <button id="aiSkillSaveBtn" class="ai-modal-save">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sistema de modales temáticos (DEBE cargarse antes que el resto) -->
+  <script src="modals.js?v=1016"></script>
+  <!-- Script principal -->
+  <script src="script.js?v=1016"></script>
+  <script src="ai_chat.js?v=1016"></script>
+  <script>
+    document.querySelectorAll('.restore-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            restoreTask(this);
+        });
+    });
+
+    function restoreTask(button) {
+        console.log('Tarea restaurada');
+    }
+  </script>
+</body>
+</html>

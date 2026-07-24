@@ -1,0 +1,8 @@
+{
+  "name": "Gestor de Tareas",
+  "short_name": "Tareas",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "background_color": "#ffffff",
+  "theme_color": "#317EFB"
+}
