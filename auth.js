@@ -4,8 +4,54 @@
   const SUPABASE_URL = 'https://uwxopjatesgptsrwyeqr.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_DvGtq7FNsg82Ufny1P1_OA_t-AMIpZU';
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const PENDING_SYNC_PREFIX = 'efectiva_pending_sync_';
   let currentUser = null;
   let syncTimer = null;
+  let syncInProgress = false;
+
+  function pendingSyncKey() {
+    return currentUser ? PENDING_SYNC_PREFIX + currentUser.id : null;
+  }
+  function readPendingSync() {
+    const key = pendingSyncKey();
+    if (!key) return null;
+    try { return JSON.parse(localStorage.getItem(key) || 'null'); }
+    catch (_) { return null; }
+  }
+  function writePendingSync(payload) {
+    const key = pendingSyncKey();
+    if (key) localStorage.setItem(key, JSON.stringify(payload));
+  }
+  function clearPendingSync() {
+    const key = pendingSyncKey();
+    if (key) localStorage.removeItem(key);
+  }
+  function queueSync(payload) {
+    if (!currentUser) return;
+    const previous = readPendingSync() || {};
+    // Mantiene la última versión completa de cada área, nunca bloquea la UI.
+    writePendingSync({ ...previous, ...payload, _queuedAt: Date.now() });
+    if (navigator.onLine) flushPendingSync();
+  }
+  async function flushPendingSync() {
+    if (!currentUser || !navigator.onLine || syncInProgress) return;
+    const pending = readPendingSync();
+    if (!pending) return;
+    syncInProgress = true;
+    try {
+      const { _queuedAt, ...payload } = pending;
+      // Fusiona áreas (tareas/historial) para no sobrescribir una con otra.
+      const current = await loadData() || {};
+      await saveData({ ...current, ...payload });
+      clearPendingSync();
+      window.dispatchEvent(new CustomEvent('efectiva:sync-complete'));
+    } catch (error) {
+      // El cambio permanece en cola; se reintentará en el próximo "online".
+      console.warn('Efectiva quedó pendiente de sincronizar:', error.message);
+    } finally {
+      syncInProgress = false;
+    }
+  }
 
   function el(html) {
     const wrapper = document.createElement('div');
@@ -74,7 +120,7 @@
   }
 
   async function loadData() {
-    if (!currentUser) return null;
+    if (!currentUser || !navigator.onLine) return null;
     const { data, error } = await client.from('user_data').select('data').eq('user_id', currentUser.id).maybeSingle();
     if (error) throw error;
     return data ? data.data : null;
@@ -91,15 +137,10 @@
   }
 
   function scheduleSave(payload) {
+    // La UI ya guardó localmente. Encolamos y retornamos sin esperar a internet.
+    queueSync(payload);
     clearTimeout(syncTimer);
-    syncTimer = setTimeout(async () => {
-      try {
-        const current = await loadData() || {};
-        // Conserva el historial IA ya sincronizado al guardar tareas y carpetas.
-        await saveData({ ...current, ...payload });
-      }
-      catch (error) { console.error('No se pudo sincronizar Efectiva:', error.message); }
-    }, 700);
+    syncTimer = setTimeout(flushPendingSync, 700);
   }
 
   // El historial se guarda dentro del mismo registro privado del usuario.
@@ -113,12 +154,8 @@
 
   async function saveAIChats(chats, currentChatId) {
     if (!currentUser) return;
-    const current = await loadData() || {};
-    await saveData({
-      ...current,
-      aiChats: chats,
-      aiCurrentChatId: currentChatId || null
-    });
+    // Se encola igual que las tareas: el chat no espera una respuesta de red.
+    queueSync({ aiChats: chats, aiCurrentChatId: currentChatId || null });
   }
 
   window.EfectivaCloud = {
@@ -130,10 +167,13 @@
     async signOut() { await client.auth.signOut(); }
   };
 
+  window.addEventListener('online', () => flushPendingSync());
+
   client.auth.onAuthStateChange((_event, session) => {
     currentUser = session?.user || null;
     if (currentUser) {
       hideAuth();
+      flushPendingSync();
       window.dispatchEvent(new CustomEvent('efectiva:authenticated'));
     } else {
       showAuth();
@@ -144,6 +184,7 @@
     currentUser = data.session?.user || null;
     if (currentUser) {
       hideAuth();
+      flushPendingSync();
       window.dispatchEvent(new CustomEvent('efectiva:authenticated'));
     } else {
       showAuth();
