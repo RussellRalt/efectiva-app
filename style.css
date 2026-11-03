@@ -559,39 +559,248 @@ header {
   background-color: #666;
 }
 
-/* MODAL DE PRESENTACIÓN */
+/* MODAL DE PRESENTACIÓN ESTILO TIKTOK MODERNO */
 .presentation-modal {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: #000000da;
+  background: radial-gradient(ellipse at 50% 20%, rgba(24, 30, 48, 0.97) 0%, rgba(10, 14, 24, 0.99) 100%);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   display: none;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   z-index: 9999;
-  color: #fff;
+  color: #f8fafc;
   text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+  overflow: hidden;
 }
+
 .presentation-content {
-  width: 95%;
-  max-width: 800px;
-  padding: 1rem;
+  width: 94%;
+  max-width: 660px;
+  height: 92vh;
+  max-height: 840px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  box-sizing: border-box;
+  padding: 1rem 0.8rem;
 }
+
+/* Header bar */
+.presentation-header-bar {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0.35rem;
+}
+
+.presentation-task-info {
+  text-align: left;
+  overflow: hidden;
+  flex: 1;
+}
+
+.presentation-folder-tag {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  font-weight: 700;
+  display: block;
+}
+
+.presentation-task-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 2px 0 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #f1f5f9;
+}
+
+.presentation-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Barra de progreso estilo Stories / TikTok */
+.presentation-progress-bar-container {
+  width: 100%;
+  display: flex;
+  gap: 5px;
+  margin: 6px 0 10px 0;
+}
+
+.presentation-progress-segment {
+  height: 4px;
+  flex: 1;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  transition: background-color 0.25s ease, transform 0.2s ease, opacity 0.2s ease;
+}
+
+.presentation-progress-segment.completed {
+  background: #3b82f6;
+  opacity: 0.85;
+}
+
+.presentation-progress-segment.active {
+  background: #60a5fa;
+  box-shadow: 0 0 10px rgba(96, 165, 250, 0.75);
+  transform: scaleY(1.4);
+}
+
+.presentation-step-counter {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px 14px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Card contenedor y paso */
+.presentation-card-wrapper {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  perspective: 1000px;
+}
+
 .presentation-step {
-  font-size: 2rem;
-  margin: 1rem 0;
-  padding: 1.5rem;
-  background-color: #222;
-  border-radius: 6px;
+  width: 100%;
+  min-height: 220px;
+  max-height: 56vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 2.2rem 1.8rem;
+  background: linear-gradient(155deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-sizing: border-box;
+  will-change: transform, opacity;
+  cursor: grab;
+  touch-action: pan-y;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
 }
+
+.presentation-step:active {
+  cursor: grabbing;
+}
+
+.presentation-step::-webkit-scrollbar {
+  width: 6px;
+}
+.presentation-step::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+/* Barra inferior */
+.presentation-bottom-bar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .timer {
-  margin-top: 1rem;
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: #ffdb4d;
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.08em;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  padding: 6px 22px;
+  border-radius: 30px;
+  box-shadow: 0 4px 16px rgba(251, 191, 36, 0.12);
+  margin: 0;
+}
+
+.presentation-swipe-hint {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.03em;
+  animation: pulse-hint 2.5s infinite ease-in-out;
+}
+
+.presentation-swipe-hint .hint-arrow {
+  font-size: 0.95rem;
+  color: #60a5fa;
+}
+
+@keyframes pulse-hint {
+  0%, 100% { opacity: 0.55; transform: translateY(0); }
+  50% { opacity: 0.95; transform: translateY(-2px); }
+}
+
+/* Adaptación cuando el modal está minimizado */
+.presentation-modal.minimized .presentation-content {
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  justify-content: center;
+}
+.presentation-modal.minimized .presentation-header-bar,
+.presentation-modal.minimized .presentation-progress-bar-container,
+.presentation-modal.minimized .presentation-step-counter,
+.presentation-modal.minimized .presentation-swipe-hint {
+  display: none !important;
+}
+.presentation-modal.minimized .presentation-card-wrapper {
+  margin: 0;
+}
+.presentation-modal.minimized .presentation-step {
+  min-height: unset;
+  max-height: 85px;
+  padding: 8px;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+}
+.presentation-modal.minimized .presentation-bottom-bar {
+  margin-top: 2px;
+}
+.presentation-modal.minimized .timer {
+  font-size: 1rem;
+  padding: 2px 10px;
 }
 
 /* MODAL MINIMIZADO DE PRESENTACIÓN (PiP arrastrable v2.7.1) */
@@ -844,15 +1053,44 @@ body.light-theme .trash-buttons button:hover {
   background-color: #ccc;
 }
 body.light-theme #presentationModal {
-  background-color: #000000aa;
-  color: #333;
+  background: radial-gradient(ellipse at 50% 20%, rgba(241, 245, 249, 0.97) 0%, rgba(226, 232, 240, 0.99) 100%);
+  color: #0f172a;
+}
+body.light-theme .presentation-task-name {
+  color: #0f172a;
+}
+body.light-theme .presentation-folder-tag {
+  color: #64748b;
+}
+body.light-theme .presentation-step-counter {
+  color: #475569;
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+body.light-theme .presentation-progress-segment {
+  background: rgba(0, 0, 0, 0.12);
+}
+body.light-theme .presentation-progress-segment.completed {
+  background: #2563eb;
+}
+body.light-theme .presentation-progress-segment.active {
+  background: #3b82f6;
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.4);
 }
 body.light-theme .presentation-step {
-  background-color: #fff;
-  color: #333;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.98) 100%);
+  color: #0f172a;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 body.light-theme .timer {
-  color: #ff9900;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.3);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.12);
+}
+body.light-theme .presentation-swipe-hint {
+  color: #64748b;
 }
 body.light-theme .mini-folder-container {
   background: #ffffff;
@@ -908,16 +1146,45 @@ body.cyberpunk-theme .trash-buttons button:hover {
   background-color: #231b2e;
 }
 body.cyberpunk-theme #presentationModal {
-  background-color: rgba(0,0,0,0.9);
+  background: radial-gradient(ellipse at 50% 20%, rgba(15, 12, 30, 0.97) 0%, rgba(5, 5, 15, 0.99) 100%);
   color: #00ffe7;
 }
-body.cyberpunk-theme .presentation-step {
-  background-color: #1b1f31;
+body.cyberpunk-theme .presentation-task-name {
   color: #00ffe7;
-  box-shadow: 0 0 10px #ff0090;
+  text-shadow: 0 0 8px rgba(0, 255, 231, 0.5);
+}
+body.cyberpunk-theme .presentation-folder-tag {
+  color: #ff0090;
+}
+body.cyberpunk-theme .presentation-step-counter {
+  color: #00ffe7;
+  background: rgba(255, 0, 144, 0.15);
+  border-color: rgba(255, 0, 144, 0.4);
+}
+body.cyberpunk-theme .presentation-progress-segment {
+  background: rgba(255, 255, 255, 0.15);
+}
+body.cyberpunk-theme .presentation-progress-segment.completed {
+  background: #ff0090;
+}
+body.cyberpunk-theme .presentation-progress-segment.active {
+  background: #00ffe7;
+  box-shadow: 0 0 10px #00ffe7;
+}
+body.cyberpunk-theme .presentation-step {
+  background: rgba(27, 31, 49, 0.9);
+  color: #00ffe7;
+  border-color: rgba(255, 0, 144, 0.5);
+  box-shadow: 0 0 25px rgba(255, 0, 144, 0.35);
 }
 body.cyberpunk-theme .timer {
   color: #ff0090;
+  background: rgba(255, 0, 144, 0.15);
+  border-color: rgba(255, 0, 144, 0.4);
+  box-shadow: 0 0 15px rgba(255, 0, 144, 0.3);
+}
+body.cyberpunk-theme .presentation-swipe-hint {
+  color: #00ffe7;
 }
 body.cyberpunk-theme .mini-folder-container {
   background: #1b1f31;

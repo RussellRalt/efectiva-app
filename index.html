@@ -108,14 +108,31 @@
   <div class="presentation-modal" id="presentationModal">
     <div class="presentation-content">
       <div class="presentation-header-bar">
-        <button id="presentationAudioCoachBtn" class="audio-coach-btn" title="Activar/Desactivar voz hablada Audio-Coach">📣 Voz ON</button>
+        <div class="presentation-task-info">
+          <span class="presentation-folder-tag" id="presentationFolderTag"></span>
+          <h3 class="presentation-task-name" id="presentationTaskName"></h3>
+        </div>
+        <div class="presentation-header-actions">
+          <button id="presentationAudioCoachBtn" class="audio-coach-btn" title="Activar/Desactivar voz hablada Audio-Coach">📣 Voz ON</button>
+        </div>
       </div>
-      <!-- Contenedor para la lista de pasos de la presentación -->
-      <div id="presentationStepsContainer">
-        <ul id="presentationStepsList"></ul>
+
+      <!-- Barra de progreso segmentada estilo TikTok / Stories -->
+      <div class="presentation-progress-bar-container" id="presentationProgressContainer"></div>
+
+      <div class="presentation-step-counter" id="presentationStepCounter">Paso 1 de 1</div>
+
+      <!-- Contenedor del paso con soporte de arrastre vertical -->
+      <div class="presentation-card-wrapper" id="presentationCardWrapper">
+        <div class="presentation-step" id="presentationStep"></div>
       </div>
-      <div class="presentation-step" id="presentationStep"></div>
-      <div class="timer" id="timerDisplay">00:00</div>
+
+      <div class="presentation-bottom-bar">
+        <div class="timer" id="timerDisplay">00:00</div>
+        <div class="presentation-swipe-hint" id="presentationSwipeHint">
+          <span class="hint-arrow">↕</span> Desliza o toca para navegar
+        </div>
+      </div>
     </div>
   </div>
 

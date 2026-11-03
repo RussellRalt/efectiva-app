@@ -1860,48 +1860,106 @@ function toggleTaskStepsVisibility(task, stepsDiv, toggleBtn) {
 }
 
 /************************************************************************
- * PRESENTACIÓN
+ * PRESENTACIÓN (MODO TIKTOK VERTICAL & ESCALA DINÁMICA)
  ************************************************************************/
+let isPresentationTransitioning = false;
+let presentationTouchStartY = 0;
+let presentationTouchStartX = 0;
+let presentationTouchCurrentY = 0;
+let presentationTouchStartTime = 0;
+let isPresentationDragging = false;
+let lastSwipeTime = 0;
+
 function startPresentation(task) {
   if (!task.steps || !task.steps.length) return;
   presentationSteps = task.steps;
   currentStepIndex = task.currentStepIndex || 0;
   presentationOpen = true;
   currentPresentationTask = task;
+  isPresentationTransitioning = false;
+  isPresentationDragging = false;
+
   if (task.totalTime && task.steps.length > 0) {
     if (!task.stepTimes || task.stepTimes.length !== task.steps.length) {
       recalcStepTimes(task);
     }
-    // Se inicia el contador con el tiempo base asignado al paso actual
     currentStepCountdown = task.stepTimes[currentStepIndex];
   }
-  // Se elimina el pushState de presentación para no interferir con la navegación entre carpetas
-  // history.pushState({ presentation: true }, '', '');
+
   presentationModal.style.display = 'flex';
-  showPresentationStep();
+  showPresentationStep('none');
   startTimer();
   addMinimizeButton();
-  // FIX: limpiar listeners viejos para evitar que se acumulen entre tareas
+
+  // Limpiar y registrar listeners de interacción (click y swipe vertical)
   presentationModal.removeEventListener('click', handleFinalClick);
   presentationModal.removeEventListener('click', handlePresentationClick);
   presentationModal.removeEventListener('touchstart', handleTouchStart);
+  presentationModal.removeEventListener('touchmove', handleTouchMove);
   presentationModal.removeEventListener('touchend', handleTouchEnd);
+  presentationModal.removeEventListener('touchcancel', handleTouchCancel);
+  presentationModal.removeEventListener('mousedown', handleMouseDown);
+  window.removeEventListener('mousemove', handleMouseMove);
+  window.removeEventListener('mouseup', handleMouseUp);
+
   presentationModal.addEventListener('click', handlePresentationClick);
-  presentationModal.addEventListener('touchstart', handleTouchStart);
-  presentationModal.addEventListener('touchend', handleTouchEnd);
+  presentationModal.addEventListener('touchstart', handleTouchStart, { passive: true });
+  presentationModal.addEventListener('touchmove', handleTouchMove, { passive: false });
+  presentationModal.addEventListener('touchend', handleTouchEnd, { passive: true });
+  presentationModal.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+  presentationModal.addEventListener('mousedown', handleMouseDown);
+  window.addEventListener('mousemove', handleMouseMove);
+  window.addEventListener('mouseup', handleMouseUp);
+
   requestWakeLock();
 }
 
-// Modificar el manejador de clic para descartar clics en el botón de minimizar/maximizar
-// y para que NO dispare next/prev cuando la presentación está minimizada.
+/**
+ * Actualiza el encabezado, contador y barra de progreso segmentada estilo TikTok/Stories.
+ */
+function updatePresentationUI() {
+  const task = currentPresentationTask;
+  if (!task) return;
+
+  const taskNameEl = document.getElementById('presentationTaskName');
+  const folderTagEl = document.getElementById('presentationFolderTag');
+  if (taskNameEl) taskNameEl.textContent = task.name || 'Tarea';
+  if (folderTagEl) {
+    const folder = folders.find(f => f.id === currentFolderId);
+    folderTagEl.textContent = folder ? folder.name : 'Efectiva';
+  }
+
+  const counterEl = document.getElementById('presentationStepCounter');
+  if (counterEl) {
+    counterEl.textContent = `Paso ${currentStepIndex + 1} de ${presentationSteps.length}`;
+  }
+
+  const progressContainer = document.getElementById('presentationProgressContainer');
+  if (progressContainer) {
+    progressContainer.innerHTML = '';
+    const total = presentationSteps.length;
+    for (let i = 0; i < total; i++) {
+      const seg = document.createElement('div');
+      seg.className = 'presentation-progress-segment';
+      if (i < currentStepIndex) {
+        seg.classList.add('completed');
+      } else if (i === currentStepIndex) {
+        seg.classList.add('active');
+      }
+      progressContainer.appendChild(seg);
+    }
+  }
+}
+
+/**
+ * Click / Tap: si se pulsa a la derecha avanza, a la izquierda retrocede.
+ */
 function handlePresentationClick(e) {
-  // Si el clic proviene del botón de minimizar, salir sin realizar acción.
-  if (e.target.closest('#minimizePresentationBtn')) return;
-  // FIX v2.7.1: cuando la presentación está minimizada, el click en el body
-  // NO debe disparar next/prev (el modal se arrastra con touch y se maximiza
-  // con el botón explícito). Esto evita que un click accidental en el
-  // body del PiP avance al siguiente paso.
-  if (isPresentationMinimized) return;
+  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (isPresentationMinimized || isPresentationTransitioning) return;
+
+  // Si acaba de ocurrir un swipe, descartar el clic sintético que emite el navegador móvil
+  if (Date.now() - lastSwipeTime < 450) return;
 
   const now = Date.now();
   if (now - lastPresentationInteraction < PRESENTATION_DEBOUNCE_MS) return;
@@ -1909,148 +1967,293 @@ function handlePresentationClick(e) {
 
   const halfWidth = window.innerWidth / 2;
   if (e.clientX > halfWidth) {
-    nextStep(); // Click derecho: avanzar
+    nextStep(true); // Clic derecho: avanzar
   } else {
-    prevStep(); // Click izquierdo: retroceder
+    prevStep(true); // Clic izquierdo: retroceder
   }
 }
 
-let touchStartX = 0; // Se conserva o agrega si no existe
-
+/**
+ * Manejadores de toque para swipe vertical estilo TikTok:
+ * Deslizar hacia arriba (Swipe Up) -> Avanza al siguiente paso
+ * Deslizar hacia abajo (Swipe Down) -> Regresa al paso anterior
+ */
 function handleTouchStart(e) {
-    // FIX v2.7.1: si el touch se origina en el botón minimizar/maximizar,
-    // no registrar el touchStartX — el botón tiene su propio handler
-    // y no debe contaminar el flujo de next/prev.
-    if (e.target && e.target.closest && e.target.closest('#minimizePresentationBtn')) return;
-    // FIX v2.7.1: si la presentación está minimizada, los toques NO deben
-    // setear touchStartX con la intención de hacer next/prev. El touch es
-    // para arrastrar el PiP; si fuera un tap, lo maneja el drag handler.
-    if (isPresentationMinimized) return;
-    // Capturamos la posición inicial del toque
-    if (e.touches && e.touches[0]) {
-        touchStartX = e.touches[0].clientX;
-    }
+  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (isPresentationMinimized || isPresentationTransitioning) return;
+
+  if (e.touches && e.touches[0]) {
+    presentationTouchStartX = e.touches[0].clientX;
+    presentationTouchStartY = e.touches[0].clientY;
+    presentationTouchCurrentY = presentationTouchStartY;
+    presentationTouchStartTime = Date.now();
+    isPresentationDragging = false;
+  }
 }
 
-// Modificar el manejador de toque de forma similar:
-// FIX v2.7.1: BUG FIX CRÍTICO — antes el touchend NO chequeaba si provenía del
-// botón minimizar. En touch mobile, el touchend se dispara ANTES que el click
-// handler del botón tenga oportunidad de stopPropagation, así que `nextStep()`
-// se llamaba automáticamente (el botón está a la derecha → touchEndX > halfWidth
-// → avanza al siguiente paso). Ahora se ignora el touchend cuyo target es el
-// botón, igual que el click handler.
+function handleTouchMove(e) {
+  if (isPresentationMinimized || isPresentationTransitioning) return;
+  if (!e.touches || !e.touches[0]) return;
+
+  const currentX = e.touches[0].clientX;
+  const currentY = e.touches[0].clientY;
+  const dx = currentX - presentationTouchStartX;
+  const dy = currentY - presentationTouchStartY;
+
+  // Detección de arrastre vertical dominante
+  if (Math.abs(dy) > 7 && Math.abs(dy) > Math.abs(dx)) {
+    isPresentationDragging = true;
+    presentationTouchCurrentY = currentY;
+
+    // Resistencia si estamos en los límites
+    let effectiveDy = dy;
+    if ((currentStepIndex === 0 && dy > 0) || (currentStepIndex === presentationSteps.length - 1 && dy < 0)) {
+      effectiveDy = dy * 0.35;
+    }
+
+    presentationStep.style.transition = 'none';
+    presentationStep.style.transform = `translateY(${effectiveDy}px)`;
+    presentationStep.style.opacity = `${Math.max(0.45, 1 - Math.abs(dy) / 450)}`;
+
+    if (e.cancelable) e.preventDefault();
+  }
+}
+
 function handleTouchEnd(e) {
-  // Si el touch proviene del botón minimizar, NO hacer next/prev.
-  if (e.target && e.target.closest && e.target.closest('#minimizePresentationBtn')) return;
-  // Si la presentación está minimizada, el touch es para arrastrar, no
-  // para avanzar/retroceder. El drag handler tiene su propia lógica.
+  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#presentationAudioCoachBtn'))) return;
   if (isPresentationMinimized) return;
 
-  const now = Date.now();
-  if (now - lastPresentationInteraction < PRESENTATION_DEBOUNCE_MS) return;
-  lastPresentationInteraction = now;
+  if (isPresentationDragging) {
+    lastSwipeTime = Date.now();
+    isPresentationDragging = false;
 
-  if (e.changedTouches && e.changedTouches[0]) {
-    const touchEndX = e.changedTouches[0].clientX;
-    const halfWidth = window.innerWidth / 2;
-    if (touchEndX > halfWidth) {
-      nextStep(); // Touch derecho: avanzar
+    const dy = presentationTouchCurrentY - presentationTouchStartY;
+    const dt = Math.max(1, Date.now() - presentationTouchStartTime);
+    const velocityY = dy / dt;
+
+    // Umbral de swipe vertical
+    const isSwipeUp = dy < -45 || (dy < -20 && velocityY < -0.4);
+    const isSwipeDown = dy > 45 || (dy > 20 && velocityY > 0.4);
+
+    if (isSwipeUp) {
+      // Arrastrar hacia arriba: avanza al siguiente paso (estilo TikTok)
+      nextStep(true);
+    } else if (isSwipeDown) {
+      // Arrastrar hacia abajo: retrocede al paso anterior
+      if (currentStepIndex > 0) {
+        prevStep(true);
+      } else {
+        // En el primer paso, regresar al centro suavemente
+        presentationStep.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease';
+        presentationStep.style.transform = 'translateY(0px)';
+        presentationStep.style.opacity = '1';
+      }
     } else {
-      prevStep(); // Touch izquierdo: retroceder
+      // No alcanzó el umbral -> regresar a posición original
+      presentationStep.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease';
+      presentationStep.style.transform = 'translateY(0px)';
+      presentationStep.style.opacity = '1';
     }
   }
 }
 
-// Modificar la función prevStep para que reste el tiempo consumido, permitiendo números negativos
-function prevStep() {
+function handleTouchCancel() {
+  if (isPresentationDragging) {
+    isPresentationDragging = false;
+    presentationStep.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease';
+    presentationStep.style.transform = 'translateY(0px)';
+    presentationStep.style.opacity = '1';
+  }
+}
+
+/**
+ * Soporte de arrastre vertical con ratón para pruebas en navegadores de escritorio
+ */
+let mouseStartY = 0;
+let mouseStartX = 0;
+let isMouseDragging = false;
+let mouseStartTime = 0;
+
+function handleMouseDown(e) {
+  if (e.button !== 0) return;
+  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (isPresentationMinimized || isPresentationTransitioning) return;
+  mouseStartY = e.clientY;
+  mouseStartX = e.clientX;
+  mouseStartTime = Date.now();
+  isMouseDragging = false;
+}
+
+function handleMouseMove(e) {
+  if (!presentationOpen || isPresentationMinimized || isPresentationTransitioning) return;
+  if (mouseStartY === 0) return;
+  const dy = e.clientY - mouseStartY;
+  const dx = e.clientX - mouseStartX;
+  if (Math.abs(dy) > 7 && Math.abs(dy) > Math.abs(dx)) {
+    isMouseDragging = true;
+    let effectiveDy = dy;
+    if ((currentStepIndex === 0 && dy > 0) || (currentStepIndex === presentationSteps.length - 1 && dy < 0)) {
+      effectiveDy = dy * 0.35;
+    }
+    presentationStep.style.transition = 'none';
+    presentationStep.style.transform = `translateY(${effectiveDy}px)`;
+    presentationStep.style.opacity = `${Math.max(0.45, 1 - Math.abs(dy) / 450)}`;
+  }
+}
+
+function handleMouseUp(e) {
+  if (!presentationOpen || isPresentationMinimized) {
+    mouseStartY = 0;
+    isMouseDragging = false;
+    return;
+  }
+  if (mouseStartY === 0) return;
+  const dy = e.clientY - mouseStartY;
+  const dt = Math.max(1, Date.now() - mouseStartTime);
+  const velocityY = dy / dt;
+  mouseStartY = 0;
+
+  if (isMouseDragging) {
+    lastSwipeTime = Date.now();
+    isMouseDragging = false;
+    const isSwipeUp = dy < -45 || (dy < -20 && velocityY < -0.4);
+    const isSwipeDown = dy > 45 || (dy > 20 && velocityY > 0.4);
+
+    if (isSwipeUp) {
+      nextStep(true);
+    } else if (isSwipeDown) {
+      if (currentStepIndex > 0) {
+        prevStep(true);
+      } else {
+        presentationStep.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease';
+        presentationStep.style.transform = 'translateY(0px)';
+        presentationStep.style.opacity = '1';
+      }
+    } else {
+      presentationStep.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease';
+      presentationStep.style.transform = 'translateY(0px)';
+      presentationStep.style.opacity = '1';
+    }
+  }
+}
+
+/**
+ * Navega hacia atrás con animación vertical suave
+ */
+function prevStep(animated = true) {
+  if (isPresentationTransitioning) return;
   if (currentStepIndex > 0) {
-    if (currentPresentationTask && currentPresentationTask.totalTime) {
-      // Guardamos el tiempo actual antes de retroceder
-      const currentBaseTime = currentPresentationTask.stepTimes[currentStepIndex];
-      currentStepIndex--;
-      
-      // Calculamos cuánto tiempo se ha consumido del paso actual
-      const timeUsed = currentBaseTime - currentStepCountdown;
-      
-      // Al retroceder, tomamos el tiempo base del paso anterior y le restamos el tiempo usado
-      currentStepCountdown = currentPresentationTask.stepTimes[currentStepIndex] - timeUsed;
-    } else {
-      currentStepIndex--;
+    if (!animated) {
+      retreatStepData();
+      showPresentationStep('none');
+      return;
     }
-    showPresentationStep();
+    isPresentationTransitioning = true;
+    // Animar salida hacia abajo
+    presentationStep.style.transition = 'transform 0.2s cubic-bezier(0.4, 0, 1, 1), opacity 0.2s ease';
+    presentationStep.style.transform = 'translateY(70px)';
+    presentationStep.style.opacity = '0';
+
+    setTimeout(() => {
+      retreatStepData();
+      showPresentationStep('prev');
+      setTimeout(() => {
+        isPresentationTransitioning = false;
+      }, 260);
+    }, 180);
   }
 }
 
-function nextStep() {
+/**
+ * Navega hacia adelante con animación vertical suave
+ */
+function nextStep(animated = true) {
+  if (isPresentationTransitioning) return;
   if (currentStepIndex < presentationSteps.length - 1) {
-    if (currentPresentationTask && currentPresentationTask.totalTime) {
-      // Al avanzar mantenemos el comportamiento de sumar el tiempo restante
-      let leftover = currentStepCountdown;
-      currentStepIndex++;
-      let baseTime = currentPresentationTask.stepTimes[currentStepIndex];
-      currentStepCountdown = baseTime + leftover;
-    } else {
-      currentStepIndex++;
+    if (!animated) {
+      advanceStepData();
+      showPresentationStep('none');
+      return;
     }
-    showPresentationStep();
+    isPresentationTransitioning = true;
+    // Animar salida hacia arriba
+    presentationStep.style.transition = 'transform 0.2s cubic-bezier(0.4, 0, 1, 1), opacity 0.2s ease';
+    presentationStep.style.transform = 'translateY(-70px)';
+    presentationStep.style.opacity = '0';
+
+    setTimeout(() => {
+      advanceStepData();
+      showPresentationStep('next');
+      setTimeout(() => {
+        isPresentationTransitioning = false;
+      }, 260);
+    }, 180);
   } else {
     showCongratulations();
   }
 }
 
+function advanceStepData() {
+  if (currentPresentationTask && currentPresentationTask.totalTime) {
+    let leftover = currentStepCountdown;
+    currentStepIndex++;
+    let baseTime = (currentPresentationTask.stepTimes && currentPresentationTask.stepTimes[currentStepIndex]) || 0;
+    currentStepCountdown = baseTime + leftover;
+  } else {
+    currentStepIndex++;
+  }
+}
+
+function retreatStepData() {
+  if (currentPresentationTask && currentPresentationTask.totalTime) {
+    const currentBaseTime = (currentPresentationTask.stepTimes && currentPresentationTask.stepTimes[currentStepIndex]) || 0;
+    currentStepIndex--;
+    const timeUsed = currentBaseTime - currentStepCountdown;
+    const prevBaseTime = (currentPresentationTask.stepTimes && currentPresentationTask.stepTimes[currentStepIndex]) || 0;
+    currentStepCountdown = prevBaseTime - timeUsed;
+  } else {
+    currentStepIndex--;
+  }
+}
+
 /**
- * Ajusta el font-size del texto de la presentación para que SIEMPRE
- * entre en el viewport sin desbordar, manteniendo estética y simetría.
- *
- * Estrategia de dos pasadas:
- *   1) NIVEL INICIAL según cantidad de caracteres (4 niveles):
- *      - corto  (<25 chars)  → 2.5rem  (grande, vistoso)
- *      - medio  (25-60)      → 1.8rem
- *      - largo  (61-150)     → 1.3rem
- *      - muy largo (>150)    → 1.0rem
- *   2) VERIFICACIÓN REAL: si después de aplicar el nivel el texto aún
- *      se desborda (scrollHeight > maxHeight disponible), reduce 0.1rem
- *      por iteración hasta que entre perfecto (mínimo 0.7rem).
- *
- * @param {HTMLElement} el        Elemento cuyo textContent se va a setear
- * @param {string}      text      Texto a mostrar
- * @param {object}      [opts]
- * @param {number}      [opts.minFontRem=0.7]   Tamaño mínimo permitido
- * @param {number}      [opts.maxHeightRatio=0.6] Altura máx como fracción del viewport
+ * Escala dinámica y verificación de viewport para que los textos
+ * (incluso muy extensos) siempre se vean elegantes y nunca desborden.
  */
 function fitPresentationText(el, text, opts) {
   opts = opts || {};
-  const minFontRem = opts.minFontRem || 0.7;
-  const maxHeightRatio = opts.maxHeightRatio || 0.6;
+  const minFontRem = opts.minFontRem || 0.85;
+  const maxHeightRatio = opts.maxHeightRatio || 0.52;
 
-  // 1) Limpiar y setear el texto
   el.textContent = text;
-
-  // 2) Elegir nivel inicial según cantidad de caracteres
   const len = (text || '').length;
+
   let fontRem;
-  if (len < 25) {
-    fontRem = 2.5;
-  } else if (len < 60) {
+  if (len < 30) {
+    fontRem = 2.4;
+  } else if (len < 70) {
     fontRem = 1.8;
-  } else if (len < 150) {
-    fontRem = 1.3;
+  } else if (len < 160) {
+    fontRem = 1.35;
   } else {
-    fontRem = 1.0;
+    fontRem = 1.05;
   }
 
-  // 3) Aplicar y verificar contra el viewport
   const viewportH = window.innerHeight || 800;
-  const maxH = viewportH * maxHeightRatio;
+  const maxH = Math.max(160, viewportH * maxHeightRatio);
+
   el.style.fontSize = fontRem + 'rem';
-  el.style.lineHeight = '1.3';
+  el.style.lineHeight = len < 50 ? '1.3' : '1.45';
+  el.style.letterSpacing = len < 30 ? '0.02em' : 'normal';
   el.style.wordBreak = 'break-word';
   el.style.overflowWrap = 'break-word';
+  el.style.maxHeight = maxH + 'px';
+  el.style.overflowY = 'auto';
 
-  // 4) Si se desborda, reducir 0.1rem por iteración
+  // Reducción iterativa hasta que no haya desbordamiento vertical
   let attempts = 0;
-  while (el.scrollHeight > maxH && fontRem > minFontRem && attempts < 30) {
-    fontRem = Math.max(minFontRem, fontRem - 0.1);
+  while (el.scrollHeight > maxH && fontRem > minFontRem && attempts < 25) {
+    fontRem = Math.max(minFontRem, Math.round((fontRem - 0.08) * 100) / 100);
     el.style.fontSize = fontRem + 'rem';
     attempts++;
   }
@@ -2092,50 +2295,88 @@ if (presentationAudioCoachBtn) {
   };
 }
 
-function showPresentationStep() {
+function showPresentationStep(direction = 'none') {
+  updatePresentationUI();
   const text = presentationSteps[currentStepIndex] || '';
-  fitPresentationText(presentationStep, text, { minFontRem: 0.9 });
+
+  // Limpiar estados de congrats si veníamos de allí
+  presentationStep.style.textAlign = '';
+  presentationStep.style.lineHeight = '';
+
+  fitPresentationText(presentationStep, text, { minFontRem: 0.85 });
   speakPresentationStep(text);
+
+  if (direction === 'next') {
+    // Entra desde abajo (slide up)
+    presentationStep.style.transition = 'none';
+    presentationStep.style.transform = 'translateY(60px)';
+    presentationStep.style.opacity = '0';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        presentationStep.style.transition = 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.26s ease';
+        presentationStep.style.transform = 'translateY(0px)';
+        presentationStep.style.opacity = '1';
+      });
+    });
+  } else if (direction === 'prev') {
+    // Entra desde arriba (slide down)
+    presentationStep.style.transition = 'none';
+    presentationStep.style.transform = 'translateY(-60px)';
+    presentationStep.style.opacity = '0';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        presentationStep.style.transition = 'transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.26s ease';
+        presentationStep.style.transform = 'translateY(0px)';
+        presentationStep.style.opacity = '1';
+      });
+    });
+  } else {
+    presentationStep.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+    presentationStep.style.transform = 'translateY(0px)';
+    presentationStep.style.opacity = '1';
+  }
 }
 
 function showCongratulations() {
-  // Calcular el progreso (tarea X de Y) usando la queue ORIGINAL del modo play
-  // (no la queue actual, que puede haber cambiado si se mueven tareas a finished)
+  updatePresentationUI();
+  const counterEl = document.getElementById('presentationStepCounter');
+  if (counterEl) counterEl.textContent = '¡Completado!';
+
+  const progressSegments = document.querySelectorAll('.presentation-progress-segment');
+  progressSegments.forEach(seg => {
+    seg.classList.remove('active');
+    seg.classList.add('completed');
+  });
+
   let progressHtml = '';
   if (folderPlayFolderId && folderPlayOriginalLength > 0) {
     const current = folderPlayIndex + 1;
     const total = folderPlayOriginalLength;
-    progressHtml = '<div style="font-size:0.85rem;opacity:0.6;margin-top:0.4rem;">Tarea ' + current + ' de ' + total + '</div>';
+    progressHtml = '<div style="font-size:0.85rem;opacity:0.7;margin-top:0.4rem;">Tarea ' + current + ' de ' + total + '</div>';
   }
 
-  // El texto principal es fijo ("¡Tarea completada!") así que fitPresentationText
-  // va a darle 2.5rem (texto corto, <25 chars). Pero dejamos el wrapper con
-  // el emoji y el subtítulo para mantener la composición original.
-  // Primero aplicamos el ajuste al wrapper (es la "caja" completa).
   presentationStep.style.textAlign = 'center';
   presentationStep.style.lineHeight = '1.4';
+  presentationStep.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease';
+  presentationStep.style.transform = 'translateY(0px)';
+  presentationStep.style.opacity = '1';
 
-  // Construimos el HTML completo y dejamos que fitPresentationText actúe sobre
-  // el contenedor completo midiendo el wrapper en lugar de solo el texto.
   presentationStep.innerHTML =
-    '<div style="font-size:3rem;margin-bottom:0.5rem;">🎉</div>' +
-    '<div class="congrats-main">¡Tarea completada!</div>' +
+    '<div style="font-size:3.2rem;margin-bottom:0.4rem;">🎉</div>' +
+    '<div class="congrats-main" style="font-size:2.2rem;font-weight:700;color:#fbbf24;">¡Tarea completada!</div>' +
     progressHtml +
-    '<div style="font-size:1rem;opacity:0.7;margin-top:0.8rem;">Tocá para recibir tu recompensa 🎁</div>';
+    '<div style="font-size:0.95rem;opacity:0.8;margin-top:0.8rem;color:#cbd5e1;">Tocá para recibir tu recompensa 🎁</div>';
 
-  // Ajustar el tamaño del texto principal ("¡Tarea completada!") según
-  // su largo. Como tiene 19 chars, va a quedar en 2.5rem.
   const mainEl = presentationStep.querySelector('.congrats-main');
   if (mainEl) {
-    fitPresentationText(mainEl, mainEl.textContent, { minFontRem: 1.0, maxHeightRatio: 0.3 });
+    fitPresentationText(mainEl, mainEl.textContent, { minFontRem: 1.1, maxHeightRatio: 0.3 });
   }
 
-  // FIX CRÍTICO: remover TODOS los listeners viejos para que handleFinalClick
-  // sea el único que se ejecute. Antes handlePresentationClick quedaba colgado
-  // y procesaba el click como "nextStep" → showCongratulations → loop.
   presentationModal.removeEventListener('click', handlePresentationClick);
   presentationModal.removeEventListener('touchstart', handleTouchStart);
+  presentationModal.removeEventListener('touchmove', handleTouchMove);
   presentationModal.removeEventListener('touchend', handleTouchEnd);
+  presentationModal.removeEventListener('touchcancel', handleTouchCancel);
   presentationModal.removeEventListener('click', handleFinalClick);
   presentationModal.addEventListener('click', handleFinalClick);
 }
@@ -2393,29 +2634,26 @@ function addMinimizeButton() {
   if (!document.getElementById('minimizePresentationBtn')) {
     const btn = document.createElement('button');
     btn.id = 'minimizePresentationBtn';
-    btn.className = 'minimize-btn'; // Asegura que exista una clase con estilos definidos en CSS si es necesario
-    btn.textContent = isPresentationMinimized ? 'Maximizar' : 'Minimizar';
+    btn.className = 'audio-coach-btn minimize-btn';
+    btn.textContent = isPresentationMinimized ? '🗖 Maximizar' : '🗕 Minimizar';
 
-    // Se asignan estilos en línea para posicionar el botón (opcional, de acuerdo al diseño deseado)
-    btn.style.position = 'absolute';
-    btn.style.top = '10px';
-    btn.style.right = '10px';
-    btn.style.zIndex = '10';
-
-    // Al hacer clic se evita la propagación del evento, se alterna el estado y se actualiza el texto
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       togglePresentationMinimized();
-      btn.textContent = isPresentationMinimized ? 'Maximizar' : 'Minimizar';
+      btn.textContent = isPresentationMinimized ? '🗖 Maximizar' : '🗕 Minimizar';
     });
 
-    // Inserta el botón en el contenedor de contenido de la presentación
-    const presentationContent = presentationModal.querySelector('.presentation-content');
-    if (presentationContent) {
-      presentationContent.appendChild(btn);
+    const headerActions = presentationModal.querySelector('.presentation-header-actions');
+    if (headerActions) {
+      headerActions.appendChild(btn);
+      btn.style.position = 'static';
     } else {
-      // Si no se encuentra, se inserta directamente en el modal
-      presentationModal.appendChild(btn);
+      const presentationContent = presentationModal.querySelector('.presentation-content');
+      if (presentationContent) {
+        presentationContent.appendChild(btn);
+      } else {
+        presentationModal.appendChild(btn);
+      }
     }
   }
 }
@@ -2458,7 +2696,9 @@ function closePresentation(force = false) {
   presentationModal.removeEventListener('click', handlePresentationClick);
   presentationModal.removeEventListener('click', handleFinalClick);
   presentationModal.removeEventListener('touchstart', handleTouchStart);
+  presentationModal.removeEventListener('touchmove', handleTouchMove);
   presentationModal.removeEventListener('touchend', handleTouchEnd);
+  presentationModal.removeEventListener('touchcancel', handleTouchCancel);
   presentationModal.onclick = null;
   if (currentPresentationTask) {
     currentPresentationTask.currentStepIndex = currentStepIndex;
@@ -3053,39 +3293,7 @@ function closePresentation(skipHistory = false) {
   releaseWakeLock();
 }
 
-// Modificar la función nextStep para sumar/restar el tiempo residual al siguiente paso
-function nextStep() {
-  if (currentPresentationTask && currentPresentationTask.totalTime) {
-    if (currentStepIndex < presentationSteps.length - 1) {
-      // Calcular el ajuste: el valor actual de currentStepCountdown se usará (positivo o negativo)
-      let leftover = currentStepCountdown;
-      currentStepIndex++;
-      let baseTime = currentPresentationTask.stepTimes[currentStepIndex];
-      currentStepCountdown = baseTime + leftover;
-      showPresentationStep();
-    } else {
-      showCongratulations();
-    }
-  } else {
-    if (currentStepIndex < presentationSteps.length - 1) {
-      currentStepIndex++;
-      showPresentationStep();
-    } else {
-      showCongratulations();
-    }
-  }
-}
-
-// (Opcional) Modificar prevStep de forma similar para ajustar el tiempo al paso anterior
-function prevStep() {
-  if (currentStepIndex > 0) {
-    let leftover = currentStepCountdown;
-    currentStepIndex--;
-    let baseTime = currentPresentationTask.stepTimes[currentStepIndex];
-    currentStepCountdown = baseTime + leftover;
-    showPresentationStep();
-  }
-}
+// [Duplicates removed: nextStep and prevStep are unified above]
 
 // AGREGAR HANDLER PARA VISIBILITYCHANGE
 document.addEventListener("visibilitychange", () => {
@@ -3168,14 +3376,18 @@ function updateTimerDisplay(elapsedTime) {
     timerDisplay.textContent = `${sign}${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-// Eventos de navegación
+// Eventos de navegación con teclado para la presentación (TikTok style)
 document.addEventListener('keydown', (e) => {
-    if (!isPresentationMode) return;
+    if (!presentationOpen || isPresentationMinimized) return;
 
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-        handlePresentationNavigation('next');
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        handlePresentationNavigation('prev');
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+        e.preventDefault();
+        nextStep(true);
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        prevStep(true);
+    } else if (e.key === 'Escape') {
+        closePresentation();
     }
 });
 
