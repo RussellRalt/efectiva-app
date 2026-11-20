@@ -216,17 +216,46 @@ IMPORTANTE:
       description: 'Registra el tiempo real invertido/consumido en minutos en una tarea.',
       parameters: { type: 'object', properties: { tarea_id: { type: 'string' }, minutos_reales: { type: 'integer' }, comentario: { type: ['string', 'null'] } }, required: ['tarea_id', 'minutos_reales'] } } },
     { type: 'function', function: { name: 'crear_regla_automatizacion',
-      description: 'Crea una regla automática (ej: al completar tarea/carpeta -> crear recompensa, cambiar prioridad o cambiar color).',
+      description: 'Crea una regla automática (disparadores: paso_completado, tarea_completada, carpeta_completada -> crear_tarea, mover_tarea, crear_recompensa, asignar_prioridad o asignar_color).',
       parameters: {
         type: 'object',
         properties: {
-          evento: { type: 'string', description: 'tarea_completada | carpeta_completada' },
-          condicion: { type: 'object', properties: { carpeta_id: { type: 'string' }, prioridad: { type: 'string' } } },
-          accion_automatica: { type: 'string', description: 'crear_recompensa | asignar_prioridad | asignar_color' },
-          parametros_accion: { type: 'object', properties: { nombre: { type: 'string' }, tiempo_minutos: { type: 'integer' }, nueva_prioridad: { type: 'string' }, nuevo_color: { type: 'string' } } }
+          evento: { type: 'string', description: 'paso_completado | tarea_completada | carpeta_completada' },
+          condicion: { type: 'object', properties: { carpeta_id: { type: 'string' }, prioridad: { type: 'string' }, tarea_id: { type: 'string' }, paso_indice: { type: 'integer' }, paso_contiene: { type: 'string' } } },
+          accion_automatica: { type: 'string', description: 'crear_tarea | mover_tarea | crear_recompensa | asignar_prioridad | asignar_color' },
+          parametros_accion: { type: 'object', properties: { nombre: { type: 'string' }, tiempo_minutos: { type: 'number' }, pasos: { type: 'array', items: { type: 'string' } }, prioridad: { type: 'string' }, color: { type: 'string' }, carpeta_destino_id: { type: 'string' }, nueva_prioridad: { type: 'string' }, nuevo_color: { type: 'string' } } }
         },
         required: ['evento', 'accion_automatica']
       } } },
+    { type: 'function', function: { name: 'guardar_plantilla_usuario',
+      description: 'Guarda una tarea existente como plantilla personalizada reutilizable (con sus pasos, tiempos, colores, prioridad, formato de agradecimiento y alineación cuadridimensional cuerpo/mente/emociones/espíritu).',
+      parameters: {
+        type: 'object',
+        properties: {
+          tarea_id: { type: 'string' },
+          nombre_plantilla: { type: 'string' },
+          formato_agradecimiento: { type: 'string' },
+          alineacion_cuadridimensional: {
+            type: 'object',
+            properties: {
+              cuerpo: { type: 'string' },
+              mente: { type: 'string' },
+              emociones: { type: 'string' },
+              espiritu: { type: 'string' }
+            }
+          }
+        },
+        required: ['tarea_id']
+      } } },
+    { type: 'function', function: { name: 'listar_plantillas_usuario',
+      description: 'Lista todas las plantillas personalizadas guardadas por el usuario.',
+      parameters: { type: 'object', properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'aplicar_plantilla_usuario',
+      description: 'Aplica una plantilla personalizada guardada en una carpeta con un solo paso.',
+      parameters: { type: 'object', properties: { plantilla_id: { type: 'string' }, carpeta_destino_id: { type: 'string' } }, required: ['plantilla_id'] } } },
+    { type: 'function', function: { name: 'eliminar_plantilla_usuario',
+      description: 'Elimina una plantilla personalizada por su ID.',
+      parameters: { type: 'object', properties: { plantilla_id: { type: 'string' } }, required: ['plantilla_id'] } } },
     { type: 'function', function: { name: 'listar_reglas_automatizacion',
       description: 'Devuelve todas las reglas de automatización activas.',
       parameters: { type: 'object', properties: {}, required: [] } } },
@@ -312,6 +341,7 @@ IMPORTANTE:
 
     return {
       carpeta_actual_id: (typeof currentFolderId !== 'undefined') ? currentFolderId : null,
+      plantillas_usuario: (typeof userTemplates !== 'undefined') ? userTemplates.map(t => ({ id: t.id, nombre: t.name, pasos: (t.steps || []).length, tiempo_minutos: t.totalTime ? Math.round((t.totalTime / 60) * 10) / 10 : null, prioridad: t.priority || null })) : [],
       presentacion_activa: activePres,
       carpetas: (typeof folders !== 'undefined') ? folders.map(f => ({
         id: f.id, nombre: f.name, es_recompensas: !!f.isDefaultRewards,
@@ -733,8 +763,20 @@ IMPORTANTE:
       const steps = found.task.steps || [];
       const idx = Number(paso_indice);
       if (isNaN(idx) || idx < 0 || idx >= steps.length) return { ok: false, error: `Índice de paso inválido: ${paso_indice}` };
-      const isDone = (completado !== undefined) ? !!completado : !steps[idx].completed;
-      steps[idx].completed = isDone;
+      const isDone = (completado !== undefined) ? !!completado : true;
+      if (typeof steps[idx] === 'object' && steps[idx] !== null) {
+        steps[idx].completed = isDone;
+      } else if (isDone) {
+        found.task.currentStepIndex = Math.max(found.task.currentStepIndex || 0, idx + 1);
+      }
+      if (isDone && typeof triggerAutomationEvent === 'function') {
+        triggerAutomationEvent('paso_completado', {
+          folderId: found.folder.id,
+          task: found.task,
+          stepIndex: idx,
+          stepText: (typeof steps[idx] === 'string') ? steps[idx] : (steps[idx].text || '')
+        });
+      }
       if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
       if (typeof renderTasks === 'function') renderTasks();
       return { ok: true, mensaje: `Paso ${idx + 1} "${steps[idx].text || steps[idx]}" ${isDone ? 'marcado como completado ✔️' : 'desmarcado'}.` };
@@ -1058,6 +1100,36 @@ IMPORTANTE:
     listar_reglas_automatizacion() {
       const rules = (typeof automationRules !== 'undefined') ? automationRules : [];
       return { ok: true, total: rules.length, reglas: rules };
+    },
+
+    guardar_plantilla_usuario({ tarea_id, nombre_plantilla, formato_agradecimiento, alineacion_cuadridimensional }) {
+      const found = findTask(tarea_id);
+      if (!found) return { ok: false, error: 'Tarea no encontrada' };
+      if (typeof saveTaskAsTemplate !== 'function') return { ok: false, error: 'saveTaskAsTemplate no disponible' };
+      const tpl = saveTaskAsTemplate(found.task, nombre_plantilla, {
+        gratitudeFormat: formato_agradecimiento,
+        dimensions: alineacion_cuadridimensional
+      });
+      return { ok: true, mensaje: `Plantilla "${tpl.name}" guardada (ID: ${tpl.id}).`, plantilla: tpl };
+    },
+
+    listar_plantillas_usuario() {
+      const list = (typeof userTemplates !== 'undefined') ? userTemplates : [];
+      return { ok: true, total: list.length, plantillas: list };
+    },
+
+    aplicar_plantilla_usuario({ plantilla_id, carpeta_destino_id }) {
+      if (typeof applyUserTemplate !== 'function') return { ok: false, error: 'applyUserTemplate no disponible' };
+      const destId = carpeta_destino_id || (typeof currentFolderId !== 'undefined' ? currentFolderId : null);
+      const t = applyUserTemplate(plantilla_id, destId);
+      if (!t) return { ok: false, error: 'Plantilla o carpeta destino inválida' };
+      return { ok: true, mensaje: `Plantilla "${t.name}" aplicada con éxito.`, tarea_id: t.id };
+    },
+
+    eliminar_plantilla_usuario({ plantilla_id }) {
+      if (typeof deleteUserTemplate !== 'function') return { ok: false, error: 'deleteUserTemplate no disponible' };
+      deleteUserTemplate(plantilla_id);
+      return { ok: true, mensaje: 'Plantilla eliminada.' };
     },
 
     eliminar_regla_automatizacion({ regla_id }) {

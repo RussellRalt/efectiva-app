@@ -1482,7 +1482,19 @@ function buildPendingTaskItem(folder, task) {
       taskMenu.style.display = 'none';
     });
 
-    taskMenu.append(moveMenuItem, scheduleMenuItem, deleteMenuItem);
+    const saveTplMenuItem = document.createElement('button');
+    saveTplMenuItem.textContent = '📌 Guardar plantilla';
+    saveTplMenuItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      taskMenu.style.display = 'none';
+      saveTaskAsTemplate(task, task.name);
+      saveTplMenuItem.textContent = '✅ ¡Guardada!';
+      if (typeof asistaAlert === 'function') {
+        asistaAlert(`La tarea "${task.name}" se guardó como plantilla reutilizable.`, { title: 'Plantilla guardada', type: 'info' });
+      }
+    });
+
+    taskMenu.append(moveMenuItem, scheduleMenuItem, saveTplMenuItem, deleteMenuItem);
     taskButtons.append(toggleBtn, colorBtn, playBtn, menuBtn, taskMenu);
   }
 
@@ -1748,6 +1760,160 @@ function saveAutomationRules() {
 }
 loadAutomationRules();
 
+// === PLANTILLAS DE USUARIO PERSONALIZADAS ===
+const USER_TEMPLATES_KEY = 'efectivaUserTemplatesV1';
+let userTemplates = [];
+
+function loadUserTemplates() {
+  try {
+    const raw = localStorage.getItem(USER_TEMPLATES_KEY);
+    userTemplates = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(userTemplates)) userTemplates = [];
+  } catch (e) { userTemplates = []; }
+}
+
+function saveUserTemplates() {
+  try {
+    localStorage.setItem(USER_TEMPLATES_KEY, JSON.stringify(userTemplates));
+  } catch (e) {}
+}
+loadUserTemplates();
+
+function saveTaskAsTemplate(task, templateName, extraMeta = {}) {
+  if (!task) return null;
+  const tpl = {
+    id: '_tpl_' + Math.random().toString(36).substr(2, 9),
+    name: (templateName && templateName.trim()) ? templateName.trim() : (task.name || 'Plantilla sin nombre'),
+    steps: Array.isArray(task.steps) ? [...task.steps] : [],
+    totalTime: task.totalTime || null,
+    stepTimes: Array.isArray(task.stepTimes) ? [...task.stepTimes] : [],
+    hasCustomStepTimes: !!task.hasCustomStepTimes,
+    color: task.color || null,
+    priority: task.priority || null,
+    gratitudeFormat: extraMeta.gratitudeFormat !== undefined ? extraMeta.gratitudeFormat : (task.gratitudeFormat || ''),
+    dimensions: extraMeta.dimensions || task.dimensions || {
+      cuerpo: '',
+      mente: '',
+      emociones: '',
+      espiritu: ''
+    },
+    createdAt: Date.now()
+  };
+  userTemplates.unshift(tpl);
+  saveUserTemplates();
+  renderUserTemplatesPanel();
+  return tpl;
+}
+
+function applyUserTemplate(templateId, targetFolderId) {
+  const tpl = userTemplates.find(t => t.id === templateId);
+  if (!tpl) return null;
+  const folder = folders.find(f => f.id === (targetFolderId || currentFolderId));
+  if (!folder || folder.isDefaultRewards) return null;
+
+  const newTask = {
+    id: generateId(),
+    name: tpl.name,
+    steps: Array.isArray(tpl.steps) ? [...tpl.steps] : [],
+    isExpanded: true,
+    scheduledTimestamp: null,
+    isReward: false,
+    currentStepIndex: 0,
+    totalTime: tpl.totalTime || null,
+    stepTimes: Array.isArray(tpl.stepTimes) ? [...tpl.stepTimes] : [],
+    hasCustomStepTimes: !!tpl.hasCustomStepTimes,
+    color: tpl.color || undefined,
+    priority: tpl.priority || undefined,
+    gratitudeFormat: tpl.gratitudeFormat || '',
+    dimensions: tpl.dimensions ? { ...tpl.dimensions } : undefined
+  };
+  if (newTask.totalTime && newTask.steps.length > 0 && (!newTask.stepTimes || newTask.stepTimes.length !== newTask.steps.length)) {
+    recalcStepTimes(newTask, true);
+  }
+  folder.tasks.push(newTask);
+  saveDataToLocalStorage();
+  if (currentFolderId === folder.id) renderTasks();
+  renderFolders();
+  return newTask;
+}
+
+function deleteUserTemplate(templateId) {
+  userTemplates = userTemplates.filter(t => t.id !== templateId);
+  saveUserTemplates();
+  renderUserTemplatesPanel();
+}
+
+function renderUserTemplatesPanel() {
+  const panel = document.getElementById('userTemplatesPanel');
+  if (!panel) return;
+  panel.innerHTML = '';
+
+  if (userTemplates.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'user-templates-empty';
+    empty.textContent = 'Aún no tienes plantillas guardadas. Abre el menú (⋮) de cualquier tarea y elige "📌 Guardar plantilla".';
+    panel.appendChild(empty);
+    return;
+  }
+
+  userTemplates.forEach(tpl => {
+    const card = document.createElement('div');
+    card.className = 'user-template-card';
+    if (tpl.color) card.style.borderLeft = `4px solid ${tpl.color}`;
+
+    const info = document.createElement('div');
+    info.className = 'user-template-info';
+
+    const title = document.createElement('div');
+    title.className = 'user-template-title';
+    title.textContent = tpl.name;
+
+    const metaParts = [];
+    metaParts.push(`${(tpl.steps || []).length} pasos`);
+    if (tpl.totalTime) metaParts.push(`${Math.round((tpl.totalTime / 60) * 10) / 10} min`);
+    if (tpl.priority) metaParts.push(`Prioridad: ${tpl.priority}`);
+    const meta = document.createElement('div');
+    meta.className = 'user-template-meta';
+    meta.textContent = metaParts.join(' · ');
+
+    info.append(title, meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'user-template-actions';
+
+    const applyBtn = document.createElement('button');
+    applyBtn.type = 'button';
+    applyBtn.className = 'user-template-apply-btn';
+    applyBtn.textContent = '+ Aplicar';
+    applyBtn.addEventListener('click', () => {
+      applyUserTemplate(tpl.id, currentFolderId);
+      panel.style.display = 'none';
+      const tabTask = document.getElementById('modeTabTask');
+      const tabTpl = document.getElementById('modeTabTemplates');
+      if (tabTask && tabTpl) {
+        tabTpl.classList.remove('active');
+        tabTask.classList.add('active');
+        const taskForm = document.getElementById('taskCreationForm');
+        if (taskForm) taskForm.style.display = '';
+      }
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'user-template-del-btn';
+    delBtn.title = 'Eliminar plantilla';
+    delBtn.textContent = '🗑';
+    delBtn.addEventListener('click', () => {
+      deleteUserTemplate(tpl.id);
+    });
+
+    actions.append(applyBtn, delBtn);
+    card.append(info, actions);
+    panel.appendChild(card);
+  });
+}
+
+// === REGLAS DE AUTOMATIZACIÓN EXPANDIDAS ===
 function triggerAutomationEvent(eventType, payload) {
   if (!Array.isArray(automationRules) || automationRules.length === 0) return;
   automationRules.forEach(rule => {
@@ -1755,28 +1921,84 @@ function triggerAutomationEvent(eventType, payload) {
     if (rule.condicion) {
       if (rule.condicion.carpeta_id && payload.folderId && rule.condicion.carpeta_id !== payload.folderId) return;
       if (rule.condicion.prioridad && payload.task && rule.condicion.prioridad !== payload.task.priority) return;
+      if (rule.condicion.tarea_id && payload.task && rule.condicion.tarea_id !== payload.task.id) return;
+      if (rule.condicion.paso_indice !== undefined && rule.condicion.paso_indice !== null && payload.stepIndex !== undefined) {
+        if (Number(rule.condicion.paso_indice) !== Number(payload.stepIndex)) return;
+      }
+      if (rule.condicion.paso_contiene && payload.stepText !== undefined) {
+        const needle = String(rule.condicion.paso_contiene).toLowerCase();
+        if (!String(payload.stepText).toLowerCase().includes(needle)) return;
+      }
     }
     try {
+      const params = rule.parametros_accion || {};
       if (rule.accion_automatica === 'crear_recompensa') {
         const rewardsFolder = folders.find(f => f.isDefaultRewards);
-        if (rewardsFolder && rule.parametros_accion) {
+        if (rewardsFolder) {
           rewardsFolder.tasks.push({
             id: '_' + Math.random().toString(36).substr(2, 9),
-            name: rule.parametros_accion.nombre || '🎮 Recompensa Automática',
-            totalTime: rule.parametros_accion.tiempo_minutos ? rule.parametros_accion.tiempo_minutos * 60 : null,
-            isReward: true
+            name: params.nombre || '🎮 Recompensa Automática',
+            steps: [],
+            isExpanded: false,
+            scheduledTimestamp: null,
+            totalTime: params.tiempo_minutos ? params.tiempo_minutos * 60 : null,
+            rewardTime: params.tiempo_minutos || null,
+            isReward: true,
+            currentStepIndex: 0
           });
           saveDataToLocalStorage();
           if (typeof renderFolders === 'function') renderFolders();
+          if (currentFolderId === rewardsFolder.id && typeof renderTasks === 'function') renderTasks();
         }
-      } else if (rule.accion_automatica === 'asignar_prioridad' && payload.task && rule.parametros_accion) {
-        payload.task.priority = rule.parametros_accion.nueva_prioridad || 'alta';
+      } else if (rule.accion_automatica === 'asignar_prioridad' && payload.task) {
+        payload.task.priority = params.nueva_prioridad || 'alta';
         saveDataToLocalStorage();
         if (typeof renderTasks === 'function') renderTasks();
-      } else if (rule.accion_automatica === 'asignar_color' && payload.task && rule.parametros_accion) {
-        payload.task.color = rule.parametros_accion.nuevo_color || '#FF5252';
+      } else if (rule.accion_automatica === 'asignar_color' && payload.task) {
+        payload.task.color = params.nuevo_color || '#FF5252';
         saveDataToLocalStorage();
         if (typeof renderTasks === 'function') renderTasks();
+      } else if (rule.accion_automatica === 'crear_tarea') {
+        const targetFolder = folders.find(f => f.id === (params.carpeta_destino_id || payload.folderId) && !f.isDefaultRewards);
+        if (targetFolder) {
+          const stepsArr = Array.isArray(params.pasos) ? params.pasos.map(s => String(s)) : [];
+          const totalSec = params.tiempo_minutos ? Number(params.tiempo_minutos) * 60 : null;
+          const newTask = {
+            id: '_' + Math.random().toString(36).substr(2, 9),
+            name: params.nombre || 'Nueva tarea automática',
+            steps: stepsArr,
+            isExpanded: false,
+            scheduledTimestamp: null,
+            totalTime: totalSec,
+            stepTimes: [],
+            isReward: false,
+            currentStepIndex: 0,
+            priority: params.prioridad || undefined,
+            color: params.color || undefined
+          };
+          if (totalSec && stepsArr.length > 0 && typeof recalcStepTimes === 'function') {
+            recalcStepTimes(newTask, true);
+          }
+          targetFolder.tasks.push(newTask);
+          saveDataToLocalStorage();
+          if (typeof renderFolders === 'function') renderFolders();
+          if (currentFolderId === targetFolder.id && typeof renderTasks === 'function') renderTasks();
+        }
+      } else if (rule.accion_automatica === 'mover_tarea' && payload.task && params.carpeta_destino_id) {
+        const srcFolder = folders.find(f => f.id === payload.folderId);
+        const destFolder = folders.find(f => f.id === params.carpeta_destino_id && !f.isDefaultRewards);
+        if (srcFolder && destFolder && srcFolder.id !== destFolder.id) {
+          const idx = (srcFolder.tasks || []).findIndex(t => t.id === payload.task.id);
+          if (idx !== -1) {
+            const [moved] = srcFolder.tasks.splice(idx, 1);
+            destFolder.tasks.push(moved);
+            saveDataToLocalStorage();
+            if (typeof renderFolders === 'function') renderFolders();
+            if ((currentFolderId === srcFolder.id || currentFolderId === destFolder.id) && typeof renderTasks === 'function') {
+              renderTasks();
+            }
+          }
+        }
       }
     } catch(err) {
       console.warn('Error al ejecutar regla de automatización:', err);
@@ -2424,12 +2646,22 @@ function nextStep(animated = true) {
       }, 260);
     }, 180);
   } else {
+    if (currentPresentationTask) {
+      triggerAutomationEvent('paso_completado', {
+        folderId: currentFolderId,
+        task: currentPresentationTask,
+        stepIndex: currentStepIndex,
+        stepText: presentationSteps[currentStepIndex] || ''
+      });
+    }
     showCongratulations();
   }
 }
 
 function advanceStepData() {
   syncPresentationClock();
+  const completedIdx = currentStepIndex;
+  const completedText = presentationSteps[completedIdx] || '';
   if (currentPresentationTask && currentPresentationTask.totalTime) {
     const leftover = currentStepCountdown;
     currentStepIndex++;
@@ -2444,6 +2676,12 @@ function advanceStepData() {
   stopStepOvertimeAlarm();
   if (currentPresentationTask) {
     currentPresentationTask.currentStepIndex = currentStepIndex;
+    triggerAutomationEvent('paso_completado', {
+      folderId: currentFolderId,
+      task: currentPresentationTask,
+      stepIndex: completedIdx,
+      stepText: completedText
+    });
   }
   saveActivePresentationState();
 }
@@ -3734,3 +3972,33 @@ function releaseWakeLock() {
   }
 }
 
+
+
+// Toggle del panel de plantillas personalizadas en la vista de tareas
+(function setupUserTemplatesTab() {
+  const tabTask = document.getElementById('modeTabTask');
+  const tabNote = document.getElementById('modeTabNote');
+  const tabTpl = document.getElementById('modeTabTemplates');
+  const tplPanel = document.getElementById('userTemplatesPanel');
+  const taskForm = document.getElementById('taskCreationForm');
+  const noteForm = document.getElementById('noteCreationForm');
+  if (!tabTpl || !tplPanel) return;
+
+  tabTpl.addEventListener('click', () => {
+    [tabTask, tabNote].forEach(b => b && b.classList.remove('active'));
+    tabTpl.classList.add('active');
+    if (taskForm) taskForm.style.display = 'none';
+    if (noteForm) noteForm.style.display = 'none';
+    tplPanel.style.display = 'flex';
+    renderUserTemplatesPanel();
+  });
+
+  [tabTask, tabNote].forEach(btn => {
+    if (btn) {
+      btn.addEventListener('click', () => {
+        tabTpl.classList.remove('active');
+        tplPanel.style.display = 'none';
+      });
+    }
+  });
+})();
