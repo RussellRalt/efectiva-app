@@ -1805,7 +1805,7 @@ function saveTaskAsTemplate(task, templateName, extraMeta = {}) {
   return tpl;
 }
 
-function applyUserTemplate(templateId, targetFolderId) {
+function applyUserTemplate(templateId, targetFolderId, options = {}) {
   const tpl = userTemplates.find(t => t.id === templateId);
   if (!tpl) return null;
   const folder = folders.find(f => f.id === (targetFolderId || currentFolderId));
@@ -1813,7 +1813,7 @@ function applyUserTemplate(templateId, targetFolderId) {
 
   const newTask = {
     id: generateId(),
-    name: tpl.name,
+    name: (options.nombre_personalizado && String(options.nombre_personalizado).trim()) ? String(options.nombre_personalizado).trim() : tpl.name,
     steps: Array.isArray(tpl.steps) ? [...tpl.steps] : [],
     isExpanded: true,
     scheduledTimestamp: null,
@@ -1824,13 +1824,19 @@ function applyUserTemplate(templateId, targetFolderId) {
     hasCustomStepTimes: !!tpl.hasCustomStepTimes,
     color: tpl.color || undefined,
     priority: tpl.priority || undefined,
+    dueDate: options.fecha_iso !== undefined ? (options.fecha_iso || null) : null,
     gratitudeFormat: tpl.gratitudeFormat || '',
     dimensions: tpl.dimensions ? { ...tpl.dimensions } : undefined
   };
   if (newTask.totalTime && newTask.steps.length > 0 && (!newTask.stepTimes || newTask.stepTimes.length !== newTask.steps.length)) {
     recalcStepTimes(newTask, true);
   }
-  folder.tasks.push(newTask);
+  if (options.posicion !== undefined && options.posicion !== null && !isNaN(Number(options.posicion))) {
+    const pos = Math.max(0, Math.min(folder.tasks.length, Number(options.posicion)));
+    folder.tasks.splice(pos, 0, newTask);
+  } else {
+    folder.tasks.push(newTask);
+  }
   saveDataToLocalStorage();
   if (currentFolderId === folder.id) renderTasks();
   renderFolders();
@@ -1917,6 +1923,7 @@ function renderUserTemplatesPanel() {
 function triggerAutomationEvent(eventType, payload) {
   if (!Array.isArray(automationRules) || automationRules.length === 0) return;
   automationRules.forEach(rule => {
+    if (rule.activa === false) return;
     if (rule.evento !== eventType) return;
     if (rule.condicion) {
       if (rule.condicion.carpeta_id && payload.folderId && rule.condicion.carpeta_id !== payload.folderId) return;
@@ -1951,11 +1958,11 @@ function triggerAutomationEvent(eventType, payload) {
           if (currentFolderId === rewardsFolder.id && typeof renderTasks === 'function') renderTasks();
         }
       } else if (rule.accion_automatica === 'asignar_prioridad' && payload.task) {
-        payload.task.priority = params.nueva_prioridad || 'alta';
+        payload.task.priority = params.nueva_prioridad || params.prioridad || 'alta';
         saveDataToLocalStorage();
         if (typeof renderTasks === 'function') renderTasks();
       } else if (rule.accion_automatica === 'asignar_color' && payload.task) {
-        payload.task.color = params.nuevo_color || '#FF5252';
+        payload.task.color = params.nuevo_color || params.color || '#FF5252';
         saveDataToLocalStorage();
         if (typeof renderTasks === 'function') renderTasks();
       } else if (rule.accion_automatica === 'crear_tarea') {
@@ -2008,6 +2015,9 @@ function triggerAutomationEvent(eventType, payload) {
           if (t) { foundTask = t; foundFolderId = f.id; break; }
         }
         if (foundTask && Array.isArray(foundTask.steps) && foundTask.steps.length > 0) {
+          if (params.paso_indice !== undefined && params.paso_indice !== null) {
+            foundTask.currentStepIndex = Math.max(0, Math.min(foundTask.steps.length - 1, Number(params.paso_indice) || 0));
+          }
           if (typeof openFolder === 'function') openFolder(foundFolderId);
           if (typeof startPresentation === 'function') startPresentation(foundTask);
         }
@@ -2037,6 +2047,7 @@ function moveTaskToMiniFolder(folder, task) {
       rewardsFolder.tasks.unshift(task);
     }
   } else {
+    task.completedAt = new Date().toISOString();
     folder.finished.push(task);
   }
 
@@ -3789,7 +3800,7 @@ function checkScheduledAutomationRules() {
 
   let firedAny = false;
   automationRules.forEach(rule => {
-    if (rule.evento !== 'hora_programada' || !rule.condicion || !rule.condicion.hora) return;
+    if (rule.activa === false || rule.evento !== 'hora_programada' || !rule.condicion || !rule.condicion.hora) return;
     if (rule.condicion.hora !== hhmm) return;
     if (Array.isArray(rule.condicion.dias) && rule.condicion.dias.length > 0 && !rule.condicion.dias.includes(dayOfWeek)) return;
     if (rule._lastFiredDate === todayStr) return;
