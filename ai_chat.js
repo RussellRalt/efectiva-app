@@ -52,27 +52,20 @@
       prompt: 'Exportá todas mis carpetas y tareas en formato JSON legible.', isDefault: true }
   ];
 
-  const SYSTEM_PROMPT = `Sos el asistente inteligente con CONTROL TOTAL sobre la app "ASISTA MULTY" (gestor de tareas y rutinas).
+  const SYSTEM_PROMPT = `Sos el Copiloto Proactivo de "Efectiva / ASISTA MULTY", con CONTROL TOTAL sobre la app, memoria persistente entre sesiones y acceso a investigación web.
 
-ESTRUCTURA DE LA APP:
-- Carpetas (contienen tareas pendientes y completadas).
-- Tareas (pueden tener pasos/subtareas, tiempos en minutos, prioridades y fechas de vencimiento).
-- Recompensas (viven en la carpeta "Recompensas").
-- Papelera de reciclaje.
+ESTRUCTURA Y CAPACIDADES QUE TENÉS HOY (v14):
+1. **Control Atómico y Presentación en Vivo**: Podés crear/editar tareas completas en 1 llamada (\`guardar_tarea_completa\`), distribuir minutos por paso (\`asignar_tiempos_pasos\`), iniciar presentaciones (\`iniciar_presentacion_tarea\`), registrar/justificar retrasos en números rojos (\`registrar_retraso_paso\`) y silenciar alarmas.
+2. **Memoria Persistente a Largo Plazo**: Tenés memoria propia (\`guardar_memoria_usuario\`, \`consultar_memoria_usuario\`, \`eliminar_memoria_usuario\`) que se inyecta automáticamente al inicio de cada conversación. Guardá ahí patrones de tiempo del usuario, horarios de máxima energía, motivos frecuentes de retraso, preferencias y metas cuadridimensionales (cuerpo, mente, emociones, espíritu).
+3. **Motor GPS y Analítica Real**: Si el usuario se atrasa, usá \`recalcular_agenda_dia\` para recorrer automáticamente las reglas \`hora_programada\` restantes del día. Usá \`analizar_patrones_rendimiento\` para detectar dónde subestima tiempos y qué causas de retraso se repiten.
+4. **Ojos al Exterior (Web Research Open-Source)**: Tenés \`buscar_web\` (búsqueda en línea en vivo) y \`leer_url_web\` (vía Jina Reader para leer páginas limpias en Markdown) con opción de guardar automáticamente la investigación en una Nota vinculada a una tarea (\`tarea_id\`).
+5. **Plantillas, Notas y Reglas Operativas**: Podés crear/editar plantillas de usuario, notas (\`crear_nota\`, \`editar_nota\`) y automatizaciones por \`paso_completado\`, \`tiempo_paso_agotado\`, \`hora_programada\`, \`tarea_completada\` y \`carpeta_completada\`.
 
-TU ROL Y CAPACIDADES DE CONTROL TOTAL:
-1. **Ejecución y Estado**: Podés crear, renombrar, mover, eliminar, marcar completadas y desmarcar tareas y pasos.
-2. **Reproductor/Playlist**: Podés iniciar, pausar, reanudar, pasar al siguiente/anterior paso y detener el modo playlist.
-3. **Plantillas y Clonación**: Podés aplicar plantillas integradas ("gimnasio", "estudio", "sprint", "matutina") y duplicar cualquier tarea o carpeta completa.
-4. **Papelera y Metadatos**: Podés consultar la papelera, restaurar elementos, vaciar la papelera, asignar prioridad (alta, media, baja) y fechas límite (YYYY-MM-DD).
-5. **Reportes y Búsqueda**: Podés buscar elementos por palabra clave y generar reportes de productividad con estadísticas detalladas.
-
-IMPORTANTE:
-- Usá SIEMPRE las tools (funciones) disponibles para aplicar cambios. NUNCA digas "ya está hecho" sin haber llamado a la tool correspondiente.
-- Confirmá tus acciones en 1-2 oraciones claras y amigables.
-- Si el usuario dice "marca la tarea X como lista", usá "marcar_tarea_completada".
-- Si pide una rutina completa (ej: gimnasio), usá "aplicar_plantilla".
-- Si pide un reporte o métricas, usá "obtener_reporte_productividad".`;
+COMPORTAMIENTO PROACTIVO ESPERADO:
+- Usá SIEMPRE las tools reales antes de afirmar un cambio o dato.
+- Cuando el usuario te cuente una preferencia, horario ideal o patrón importante, guardalo proactivamente con \`guardar_memoria_usuario\` sin que tenga que pedírtelo.
+- Cuando veas retrasos o una tarea de investigación pendiente, ofrecé o ejecutá proactivamente el pre-trabajo (investigar con \`buscar_web\` y dejar una Nota lista) o el reajuste GPS (\`recalcular_agenda_dia\`).
+- Si detectás fricciones o oportunidades concretas de mejora en el ecosistema de Efectiva, aportá ideas accionables basadas en tu experiencia real usando las tools.`;
 
   // --------------------------------------------------------------------------
   //  TOOL DEFINITIONS
@@ -390,6 +383,60 @@ IMPORTANTE:
     { type: 'function', function: { name: 'obtener_estadisticas_gamificacion',
       description: 'Obtiene las estadísticas de XP total, nivel actual y racha de días consecutivos del usuario.',
       parameters: { type: 'object', properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'guardar_memoria_usuario',
+      description: 'Guarda o actualiza un recuerdo persistente a largo plazo sobre el usuario (sobrevive entre chats nuevos).',
+      parameters: {
+        type: 'object',
+        properties: {
+          categoria: { type: 'string', description: 'patrones_tiempo | energia_horarios | motivos_retraso | preferencias | cuadridimensional | proyecto' },
+          clave: { type: 'string', description: 'Identificador corto único, ej: sesgo_investigacion o horario_pico' },
+          valor: { type: 'string', description: 'Información aprendida para recordar siempre' }
+        },
+        required: ['categoria', 'clave', 'valor']
+      } } },
+    { type: 'function', function: { name: 'consultar_memoria_usuario',
+      description: 'Consulta los recuerdos guardados del usuario, opcionalmente filtrados por categoría.',
+      parameters: { type: 'object', properties: { categoria: { type: ['string', 'null'] } }, required: [] } } },
+    { type: 'function', function: { name: 'eliminar_memoria_usuario',
+      description: 'Elimina un recuerdo de memoria por memoria_id o clave.',
+      parameters: { type: 'object', properties: { memoria_id: { type: 'string' }, clave: { type: 'string' } }, required: [] } } },
+    { type: 'function', function: { name: 'recalcular_agenda_dia',
+      description: 'Motor GPS: recorre hacia adelante las reglas hora_programada activas del día cuando hay un retraso.',
+      parameters: {
+        type: 'object',
+        properties: {
+          minutos_retraso: { type: 'integer', description: 'Minutos a desplazar la agenda (ej: 15)' },
+          hora_desde: { type: ['string', 'null'], description: 'HH:MM desde donde reajustar (por defecto hora local actual)' }
+        },
+        required: ['minutos_retraso']
+      } } },
+    { type: 'function', function: { name: 'analizar_patrones_rendimiento',
+      description: 'Analiza el historial real de retrasos (delayLogs), tiempos reales vs estimados y recomienda ajustes.',
+      parameters: { type: 'object', properties: {}, required: [] } } },
+    { type: 'function', function: { name: 'buscar_web',
+      description: 'Busca información actualizada en la web en tiempo real y opcionalmente la guarda en una Nota vinculada.',
+      parameters: {
+        type: 'object',
+        properties: {
+          consulta: { type: 'string' },
+          guardar_en_nota_titulo: { type: ['string', 'null'] },
+          carpeta_id: { type: ['string', 'null'] },
+          tarea_id: { type: ['string', 'null'] }
+        },
+        required: ['consulta']
+      } } },
+    { type: 'function', function: { name: 'leer_url_web',
+      description: 'Lee una página web (vía Jina Reader en Markdown limpio) y opcionalmente guarda el contenido en una Nota.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string' },
+          guardar_en_nota_titulo: { type: ['string', 'null'] },
+          carpeta_id: { type: ['string', 'null'] },
+          tarea_id: { type: ['string', 'null'] }
+        },
+        required: ['url']
+      } } },
     { type: 'function', function: { name: 'configurar_audio_coach',
       description: 'Activa o desactiva la síntesis de voz en voz alta durante las rutinas / playlist.',
       parameters: { type: 'object', properties: { habilitado: { type: 'boolean' }, anunciar_pasos: { type: 'boolean' } }, required: ['habilitado'] } } }
@@ -1672,6 +1719,229 @@ IMPORTANTE:
       };
     },
 
+    guardar_memoria_usuario({ categoria, clave, valor }) {
+      const cat = String(categoria || 'preferencias').trim();
+      const k = String(clave || '').trim();
+      const v = String(valor || '').trim();
+      if (!k || !v) return { ok: false, error: 'clave y valor son obligatorios' };
+      const list = loadAgentMemory();
+      const existing = list.find(m => m.categoria === cat && m.clave === k);
+      if (existing) {
+        existing.valor = v;
+        existing.updatedAt = new Date().toISOString();
+      } else {
+        list.unshift({
+          id: '_mem_' + Math.random().toString(36).substr(2, 8),
+          categoria: cat,
+          clave: k,
+          valor: v,
+          updatedAt: new Date().toISOString()
+        });
+      }
+      saveAgentMemory(list);
+      return { ok: true, mensaje: `Memoria guardada [${cat}/${k}].`, total_memorias: list.length };
+    },
+
+    consultar_memoria_usuario({ categoria }) {
+      const list = loadAgentMemory();
+      const filtered = categoria ? list.filter(m => m.categoria === categoria) : list;
+      return { ok: true, total: filtered.length, memorias: filtered };
+    },
+
+    eliminar_memoria_usuario({ memoria_id, clave }) {
+      let list = loadAgentMemory();
+      const before = list.length;
+      list = list.filter(m => (memoria_id ? m.id !== memoria_id : true) && (clave ? m.clave !== clave : true));
+      saveAgentMemory(list);
+      return { ok: true, mensaje: `Eliminadas ${before - list.length} memorias.` };
+    },
+
+    recalcular_agenda_dia({ minutos_retraso, hora_desde }) {
+      const delta = Number(minutos_retraso);
+      if (isNaN(delta) || delta === 0) return { ok: false, error: 'minutos_retraso debe ser distinto de 0' };
+      if (typeof automationRules === 'undefined' || !Array.isArray(automationRules)) {
+        return { ok: false, error: 'No hay reglas de agenda configuradas' };
+      }
+      const now = new Date();
+      let fromMin = now.getHours() * 60 + now.getMinutes();
+      if (hora_desde && String(hora_desde).includes(':')) {
+        const [hh, mm] = String(hora_desde).split(':').map(Number);
+        if (!isNaN(hh) && !isNaN(mm)) fromMin = hh * 60 + mm;
+      }
+
+      const ajustadas = [];
+      automationRules.forEach(rule => {
+        if (rule.activa === false || rule.evento !== 'hora_programada' || !rule.condicion || !rule.condicion.hora) return;
+        const [h, m] = String(rule.condicion.hora).split(':').map(Number);
+        if (isNaN(h) || isNaN(m)) return;
+        const totalMin = h * 60 + m;
+        if (totalMin >= fromMin) {
+          const nuevoMin = Math.max(0, Math.min(23 * 60 + 59, totalMin + delta));
+          const nuevaHora = `${String(Math.floor(nuevoMin / 60)).padStart(2, '0')}:${String(nuevoMin % 60).padStart(2, '0')}`;
+          const anterior = rule.condicion.hora;
+          rule.condicion.hora = nuevaHora;
+          ajustadas.push({ regla_id: rule.id, antes: anterior, ahora: nuevaHora, accion: rule.accion_automatica });
+        }
+      });
+
+      if (ajustadas.length > 0 && typeof saveAutomationRules === 'function') {
+        saveAutomationRules();
+      }
+      return {
+        ok: true,
+        mensaje: ajustadas.length > 0
+          ? `Agenda recalculada (${delta > 0 ? '+' : ''}${delta} min) en ${ajustadas.length} reglas.`
+          : 'No había reglas hora_programada pendientes desde esa hora.',
+        ajustadas
+      };
+    },
+
+    analizar_patrones_rendimiento() {
+      const allFolders = (typeof folders !== 'undefined' && Array.isArray(folders)) ? folders : [];
+      const delays = [];
+      const desviaciones = [];
+      const motivosCount = {};
+
+      allFolders.forEach(f => {
+        const allTasks = [...(f.tasks || []), ...(f.finished || [])];
+        allTasks.forEach(t => {
+          if (Array.isArray(t.delayLogs)) {
+            t.delayLogs.forEach(d => {
+              delays.push({ carpeta: f.name, tarea: t.name, ...d });
+              const m = String(d.motivo || 'Sin especificar').trim().toLowerCase();
+              motivosCount[m] = (motivosCount[m] || 0) + 1;
+            });
+          }
+          if (t.totalTime && t.actualTimeMinutes) {
+            const est = Math.round((t.totalTime / 60) * 10) / 10;
+            desviaciones.push({
+              carpeta: f.name,
+              tarea: t.name,
+              estimado_min: est,
+              real_min: t.actualTimeMinutes,
+              diferencia_min: Math.round((t.actualTimeMinutes - est) * 10) / 10
+            });
+          }
+        });
+      });
+
+      const topMotivos = Object.entries(motivosCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([motivo, veces]) => ({ motivo, veces }));
+
+      return {
+        ok: true,
+        total_retrasos_registrados: delays.length,
+        top_motivos_retraso: topMotivos,
+        ultimos_retrasos: delays.slice(-10),
+        desviaciones_tiempo: desviaciones.slice(-10)
+      };
+    },
+
+    async buscar_web({ consulta, guardar_en_nota_titulo, carpeta_id, tarea_id }) {
+      const q = String(consulta || '').trim();
+      if (!q) return { ok: false, error: 'Consulta vacía' };
+
+      let texto = '';
+      let fuente = '';
+
+      // 1) Intentar búsqueda en línea vía OpenRouter :online usando la API key actual
+      if (AI_CONFIG.apiKey) {
+        try {
+          const onlineModel = AI_CONFIG.model.includes(':online') ? AI_CONFIG.model : (AI_CONFIG.model + ':online');
+          const res = await fetch(AI_CONFIG.baseUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + AI_CONFIG.apiKey,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://asista-multy.app',
+              'X-Title': 'ASISTA MULTY'
+            },
+            body: JSON.stringify({
+              model: onlineModel,
+              messages: [{ role: 'user', content: `Busca información actualizada y precisa en la web sobre: "${q}". Incluye datos concretos y URLs de las fuentes.` }],
+              temperature: 0.2,
+              max_tokens: 1400
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const content = data?.choices?.[0]?.message?.content;
+            if (content) {
+              texto = content;
+              fuente = 'openrouter:online';
+            }
+          }
+        } catch (e) {}
+      }
+
+      // 2) Fallback open-source gratuito sin API key: Wikipedia REST / Search API (es)
+      if (!texto) {
+        try {
+          const wpUrl = 'https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=' + encodeURIComponent(q) + '&format=json&origin=*&srlimit=4';
+          const r = await fetch(wpUrl);
+          if (r.ok) {
+            const j = await r.json();
+            const hits = (j?.query?.search || []).map(h =>
+              '- **' + h.title + '**: ' + h.snippet.replace(/<[^>]+>/g, '') + ' (https://es.wikipedia.org/wiki/' + encodeURIComponent(h.title.replace(/ /g, '_')) + ')'
+            );
+            if (hits.length > 0) {
+              texto = hits.join('\n');
+              fuente = 'wikipedia_api';
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (!texto) {
+        return { ok: false, error: 'No se pudo obtener resultados web (revisa conexión o modelo :online).' };
+      }
+
+      let notaCreada = null;
+      if (guardar_en_nota_titulo && typeof TOOL_EXECUTORS.crear_nota === 'function') {
+        const resNota = TOOL_EXECUTORS.crear_nota({
+          titulo: guardar_en_nota_titulo,
+          contenido: texto,
+          carpeta_id: carpeta_id || null,
+          tarea_id: tarea_id || null,
+          etiquetas: ['investigacion', 'web']
+        });
+        if (resNota && resNota.ok) notaCreada = resNota.nota || true;
+      }
+
+      return { ok: true, fuente, consulta: q, resumen: texto.slice(0, 4500), nota_guardada: !!notaCreada };
+    },
+
+    async leer_url_web({ url, guardar_en_nota_titulo, carpeta_id, tarea_id }) {
+      const targetUrl = String(url || '').trim();
+      if (!/^https?:\/\//i.test(targetUrl)) return { ok: false, error: 'URL inválida (debe iniciar con http:// o https://)' };
+      try {
+        const jinaUrl = 'https://r.jina.ai/' + targetUrl;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch(jinaUrl, { signal: controller.signal });
+        clearTimeout(timer);
+        if (!res.ok) return { ok: false, error: 'Jina Reader HTTP ' + res.status };
+        const md = (await res.text()).slice(0, 6000);
+
+        let notaCreada = null;
+        if (guardar_en_nota_titulo && typeof TOOL_EXECUTORS.crear_nota === 'function') {
+          const resNota = TOOL_EXECUTORS.crear_nota({
+            titulo: guardar_en_nota_titulo,
+            contenido: `Fuente: ${targetUrl}\n\n${md}`,
+            carpeta_id: carpeta_id || null,
+            tarea_id: tarea_id || null,
+            etiquetas: ['lectura-web']
+          });
+          if (resNota && resNota.ok) notaCreada = true;
+        }
+        return { ok: true, url: targetUrl, contenido_markdown: md, nota_guardada: !!notaCreada };
+      } catch (e) {
+        return { ok: false, error: 'Error leyendo URL: ' + (e && e.message ? e.message : String(e)) };
+      }
+    },
+
     configurar_audio_coach({ habilitado, anunciar_pasos }) {
       if (typeof audioCoachConfig === 'undefined') window.audioCoachConfig = { habilitado: true };
       audioCoachConfig.habilitado = !!habilitado;
@@ -1729,14 +1999,32 @@ IMPORTANTE:
     return res.json();
   }
 
+  const AGENT_MEMORY_KEY = 'efectivaAgentMemoryV1';
+  function loadAgentMemory() {
+    try {
+      const raw = localStorage.getItem(AGENT_MEMORY_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
+  }
+  function saveAgentMemory(list) {
+    try {
+      localStorage.setItem(AGENT_MEMORY_KEY, JSON.stringify(list || []));
+    } catch (e) {}
+  }
+
   function getResumenEstadoRapido() {
     if (typeof folders === 'undefined' || !Array.isArray(folders)) return '';
-    const lista = folders.map((f, i) => {
+    const lista = folders.map((f) => {
       const cantTareas = (f.tasks || []).length;
       const cantFin = (f.finished || []).length;
       return `- ${f.name} (ID: ${f.id}) [${cantTareas} tareas pdt, ${cantFin} fin]${f.isDefaultRewards ? ' (Recompensas)' : ''}`;
     }).join('\n');
-    return '\n\nESTADO ACTUAL EN TIEMPO REAL EN LA APP (' + folders.length + ' carpetas en total):\n' + (lista || '(Sin carpetas)');
+    const mems = loadAgentMemory().slice(0, 20);
+    const memBlock = mems.length > 0
+      ? '\n\nMEMORIA PERSISTENTE DEL USUARIO (' + mems.length + '):\n' + mems.map(m => `- [${m.categoria}] ${m.clave}: ${m.valor}`).join('\n')
+      : '\n\nMEMORIA PERSISTENTE DEL USUARIO: (Aún vacía; guarda patrones y preferencias relevantes con guardar_memoria_usuario).';
+    return '\n\nESTADO ACTUAL EN TIEMPO REAL EN LA APP (' + folders.length + ' carpetas en total):\n' + (lista || '(Sin carpetas)') + memBlock;
   }
 
   async function runAgent(userText, history) {
@@ -1770,7 +2058,7 @@ IMPORTANTE:
           let result;
           if (!exec) result = { ok: false, error: 'Tool desconocida: ' + fn };
           else {
-            try { result = exec(args); }
+            try { result = await exec(args); }
             catch (e) { result = { ok: false, error: 'Excepción: ' + (e && e.message ? e.message : String(e)) }; }
           }
           toolTrace.push({ tool: fn, args, result });
