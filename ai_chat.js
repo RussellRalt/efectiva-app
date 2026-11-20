@@ -96,8 +96,27 @@ IMPORTANTE:
       description: 'Cambia el nombre de una tarea.',
       parameters: { type: 'object', properties: { tarea_id: { type: 'string' }, nuevo_nombre: { type: 'string' } }, required: ['tarea_id', 'nuevo_nombre'] } } },
     { type: 'function', function: { name: 'asignar_tiempo_tarea',
-      description: 'Asigna o quita el tiempo total de una tarea (minutos). null = quitar.',
-      parameters: { type: 'object', properties: { tarea_id: { type: 'string' }, tiempo_minutos: { type: ['integer', 'null'] } }, required: ['tarea_id', 'tiempo_minutos'] } } },
+      description: 'Asigna o quita el tiempo total de una tarea (minutos) y lo reparte equitativamente entre los pasos. null = quitar.',
+      parameters: { type: 'object', properties: { tarea_id: { type: 'string' }, tiempo_minutos: { type: ['number', 'null'] } }, required: ['tarea_id', 'tiempo_minutos'] } } },
+    { type: 'function', function: { name: 'asignar_tiempos_pasos',
+      description: 'Asigna o distribuye tiempos personalizados en minutos a cada paso de una tarea (puede ser un array completo tiempos_minutos o un paso_indice + minutos puntual).',
+      parameters: {
+        type: 'object',
+        properties: {
+          tarea_id: { type: 'string' },
+          tiempos_minutos: { type: 'array', items: { type: 'number' }, description: 'Lista de minutos por cada paso en orden, ej: [2, 3, 5]' },
+          paso_indice: { type: 'integer', description: 'Índice (0-based) de un paso específico a editar' },
+          minutos: { type: 'number', description: 'Minutos a asignar al paso_indice' },
+          actualizar_total: { type: 'boolean', description: 'Si true, actualiza el totalTime de la tarea a la suma de los pasos' }
+        },
+        required: ['tarea_id']
+      } } },
+    { type: 'function', function: { name: 'iniciar_presentacion_tarea',
+      description: 'Inicia la presentación (Play) de una tarea específica en un paso opcional, activando su temporizador y alarma.',
+      parameters: { type: 'object', properties: { tarea_id: { type: 'string' }, paso_indice: { type: 'integer', description: 'Paso inicial (0-based), por defecto 0' } }, required: ['tarea_id'] } } },
+    { type: 'function', function: { name: 'silenciar_alarma',
+      description: 'Silencia la alarma de tiempo agotado que esté sonando en la presentación activa.',
+      parameters: { type: 'object', properties: {}, required: [] } } },
     { type: 'function', function: { name: 'cambiar_color_tarea',
       description: 'Cambia o quita el color de fondo de una tarea. Colores disponibles: rojo (#FF5252), naranja (#FF9800), amarillo (#FFEB3B), verde (#4CAF50), cian (#00BCD4), violeta (#9C27B0), rosa (#E91E63), ambar (#FFA000). Pasar null para volver al color default.',
       parameters: { type: 'object', properties: { tarea_id: { type: 'string' }, color: { type: ['string', 'null'], description: 'Color hex (#RRGGBB) o null para quitar el color' } }, required: ['tarea_id', 'color'] } } },
@@ -279,15 +298,30 @@ IMPORTANTE:
   //  STATE HELPERS
   // --------------------------------------------------------------------------
   function getStateSnapshot() {
+    const activePres = (typeof presentationOpen !== 'undefined' && presentationOpen && typeof currentPresentationTask !== 'undefined' && currentPresentationTask)
+      ? {
+          tarea_id: currentPresentationTask.id,
+          tarea_nombre: currentPresentationTask.name,
+          paso_actual_indice: (typeof currentStepIndex !== 'undefined') ? currentStepIndex : 0,
+          total_pasos: (typeof presentationSteps !== 'undefined') ? presentationSteps.length : 0,
+          tiempo_restante_segundos: currentPresentationTask.totalTime ? ((typeof currentStepCountdown !== 'undefined') ? currentStepCountdown : 0) : null,
+          en_negativo: !!(currentPresentationTask.totalTime && typeof currentStepCountdown !== 'undefined' && currentStepCountdown < 0),
+          alarma_activa: (typeof stepAlarmActive !== 'undefined') ? !!stepAlarmActive : false
+        }
+      : null;
+
     return {
       carpeta_actual_id: (typeof currentFolderId !== 'undefined') ? currentFolderId : null,
+      presentacion_activa: activePres,
       carpetas: (typeof folders !== 'undefined') ? folders.map(f => ({
         id: f.id, nombre: f.name, es_recompensas: !!f.isDefaultRewards,
         cantidad_tareas: (f.tasks || []).length,
         cantidad_completadas: (f.finished || []).length,
         tareas: (f.tasks || []).map(t => ({
           id: t.id, nombre: t.name, es_recompensa: !!t.isReward,
-          tiempo_minutos: t.totalTime ? Math.round(t.totalTime / 60) : (t.rewardTime || null),
+          tiempo_minutos: t.totalTime ? Math.round((t.totalTime / 60) * 10) / 10 : (t.rewardTime || null),
+          tiempos_pasos_minutos: Array.isArray(t.stepTimes) ? t.stepTimes.map(s => Math.round(((Number(s) || 0) / 60) * 10) / 10) : [],
+          tiempos_personalizados: !!t.hasCustomStepTimes,
           color: t.color || null, prioridad: t.priority || null, fecha_vencimiento: t.dueDate || null,
           pasos: t.steps || []
         }))
@@ -384,8 +418,8 @@ IMPORTANTE:
     asignar_tiempo_tarea({ tarea_id, tiempo_minutos }) {
       const found = findTask(tarea_id);
       if (!found) return { ok: false, error: 'Tarea no encontrada' };
-      found.task.totalTime = (tiempo_minutos && Number(tiempo_minutos) > 0) ? Number(tiempo_minutos) * 60 : null;
-      if (typeof recalcStepTimes === 'function') recalcStepTimes(found.task);
+      found.task.totalTime = (tiempo_minutos && Number(tiempo_minutos) > 0) ? Math.round(Number(tiempo_minutos) * 60) : null;
+      if (typeof recalcStepTimes === 'function') recalcStepTimes(found.task, true);
       if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
       if (typeof currentFolderId !== 'undefined' && currentFolderId === found.folder.id && typeof renderTasks === 'function') {
         renderTasks();
@@ -393,6 +427,79 @@ IMPORTANTE:
       return { ok: true, mensaje: found.task.totalTime
         ? `Tiempo de "${found.task.name}" actualizado a ${tiempo_minutos} min.`
         : `Tiempo de "${found.task.name}" eliminado.` };
+    },
+
+    asignar_tiempos_pasos({ tarea_id, tiempos_minutos, paso_indice, minutos, actualizar_total }) {
+      const found = findTask(tarea_id);
+      if (!found) return { ok: false, error: 'Tarea no encontrada' };
+      const task = found.task;
+      if (!Array.isArray(task.steps) || task.steps.length === 0) {
+        return { ok: false, error: 'La tarea no tiene pasos.' };
+      }
+
+      if (Array.isArray(tiempos_minutos)) {
+        task.stepTimes = task.steps.map((_, i) => {
+          const val = Number(tiempos_minutos[i]);
+          return (!isNaN(val) && val >= 0) ? Math.round(val * 60) : 0;
+        });
+        task.hasCustomStepTimes = true;
+        if (actualizar_total || !task.totalTime) {
+          task.totalTime = task.stepTimes.reduce((a, b) => a + b, 0);
+        }
+      } else if (paso_indice !== undefined && minutos !== undefined) {
+        const idx = Number(paso_indice);
+        if (isNaN(idx) || idx < 0 || idx >= task.steps.length) {
+          return { ok: false, error: `Índice de paso inválido: ${paso_indice}` };
+        }
+        if (typeof setStepTimeMinutes === 'function') {
+          setStepTimeMinutes(task, idx, Number(minutos));
+        } else {
+          if (!Array.isArray(task.stepTimes) || task.stepTimes.length !== task.steps.length) {
+            task.stepTimes = task.steps.map(() => 0);
+          }
+          task.stepTimes[idx] = Math.max(0, Math.round(Number(minutos) * 60));
+          task.hasCustomStepTimes = true;
+        }
+        if (actualizar_total) {
+          task.totalTime = task.stepTimes.reduce((a, b) => a + (Number(b) || 0), 0);
+        }
+      } else {
+        return { ok: false, error: 'Debes pasar tiempos_minutos (array) o paso_indice + minutos.' };
+      }
+
+      if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
+      if (typeof currentFolderId !== 'undefined' && currentFolderId === found.folder.id && typeof renderTasks === 'function') {
+        renderTasks();
+      }
+      const resumen = task.stepTimes.map((s, i) => `P${i + 1}: ${Math.round((s / 60) * 10) / 10}m`).join(', ');
+      return { ok: true, mensaje: `Tiempos de pasos actualizados en "${task.name}" (${resumen}).` };
+    },
+
+    iniciar_presentacion_tarea({ tarea_id, paso_indice }) {
+      const found = findTask(tarea_id);
+      if (!found) return { ok: false, error: 'Tarea no encontrada' };
+      const task = found.task;
+      if (!Array.isArray(task.steps) || task.steps.length === 0) {
+        return { ok: false, error: 'La tarea no tiene pasos para reproducir.' };
+      }
+      if (typeof openFolder === 'function') openFolder(found.folder.id);
+      if (paso_indice !== undefined && paso_indice !== null) {
+        const idx = Math.max(0, Math.min(task.steps.length - 1, Number(paso_indice) || 0));
+        task.currentStepIndex = idx;
+      }
+      if (typeof startPresentation === 'function') {
+        startPresentation(task);
+        return { ok: true, mensaje: `Presentación iniciada en "${task.name}" (paso ${(task.currentStepIndex || 0) + 1}/${task.steps.length}).` };
+      }
+      return { ok: false, error: 'startPresentation no disponible' };
+    },
+
+    silenciar_alarma() {
+      if (typeof stopStepOvertimeAlarm === 'function') {
+        stopStepOvertimeAlarm();
+        return { ok: true, mensaje: 'Alarma silenciada 🔕.' };
+      }
+      return { ok: false, error: 'Control de alarma no disponible' };
     },
 
     cambiar_color_tarea({ tarea_id, color }) {
@@ -483,7 +590,11 @@ IMPORTANTE:
       if (pos < 0) pos = 0;
       if (pos > found.task.steps.length) pos = found.task.steps.length;
       found.task.steps.splice(pos, 0, txt);
-      if (typeof recalcStepTimes === 'function') recalcStepTimes(found.task);
+      if (found.task.hasCustomStepTimes && Array.isArray(found.task.stepTimes)) {
+        found.task.stepTimes.splice(pos, 0, 0);
+      } else if (typeof recalcStepTimes === 'function') {
+        recalcStepTimes(found.task, true);
+      }
       if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
       if (typeof currentFolderId !== 'undefined' && currentFolderId === found.folder.id && typeof renderTasks === 'function') {
         renderTasks();

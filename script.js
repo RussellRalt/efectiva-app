@@ -127,6 +127,7 @@ async function initializeEfectiva() {
   cleanOldTrashItems();
   window.addEventListener('popstate', handlePopState);
   setInterval(checkAlarms, 60 * 1000);
+  restoreActivePresentationIfAny();
 }
 
 window.addEventListener('load', initializeEfectiva);
@@ -1506,6 +1507,51 @@ function buildPendingTaskItem(folder, task) {
   newStepContainer.appendChild(newStepInput);
   taskStepsDiv.appendChild(newStepContainer);
 
+  // Barra de balance de tiempo por pasos
+  if (task.steps.length > 0 && (task.totalTime || (task.stepTimes && task.stepTimes.some(t => t > 0)))) {
+    if (!task.stepTimes || task.stepTimes.length !== task.steps.length) {
+      recalcStepTimes(task, true);
+    }
+    const assignedSec = (task.stepTimes || []).reduce((acc, s) => acc + (Number(s) || 0), 0);
+    const totalSec = task.totalTime || assignedSec;
+    const diffSec = totalSec - assignedSec;
+
+    const balanceBar = document.createElement('div');
+    balanceBar.className = 'step-time-balance-bar';
+
+    const infoSpan = document.createElement('span');
+    infoSpan.className = 'step-time-balance-info';
+    const assignedMin = Math.round((assignedSec / 60) * 10) / 10;
+    const totalMin = Math.round((totalSec / 60) * 10) / 10;
+    const diffMin = Math.round((Math.abs(diffSec) / 60) * 10) / 10;
+
+    if (diffSec === 0) {
+      balanceBar.classList.add('balanced');
+      infoSpan.textContent = `⏱ Distribuido: ${assignedMin} / ${totalMin} min (completo)`;
+    } else if (diffSec > 0) {
+      balanceBar.classList.add('remaining');
+      infoSpan.textContent = `⏱ Asignado: ${assignedMin} / ${totalMin} min · Faltan ${diffMin} min`;
+    } else {
+      balanceBar.classList.add('over');
+      infoSpan.textContent = `⏱ Asignado: ${assignedMin} / ${totalMin} min · Excede por ${diffMin} min`;
+    }
+
+    const equalizeBtn = document.createElement('button');
+    equalizeBtn.className = 'step-equalize-btn';
+    equalizeBtn.type = 'button';
+    equalizeBtn.title = 'Repartir el tiempo total en partes iguales';
+    equalizeBtn.textContent = '⚖️ Equilibrar';
+    equalizeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      recalcStepTimes(task, true);
+      saveDataToLocalStorage();
+      renderTasks();
+    });
+
+    balanceBar.append(infoSpan, equalizeBtn);
+    taskStepsDiv.appendChild(balanceBar);
+  }
+
   task.steps.forEach((step, index) => {
     const stepDiv = document.createElement('div');
     stepDiv.className = 'step-item';
@@ -1553,7 +1599,20 @@ function buildPendingTaskItem(folder, task) {
     const stepButtons = document.createElement('div');
     stepButtons.className = 'step-buttons';
 
-    // v2.7.0: el botón ✏ de paso fue eliminado. Solo queda el de borrar.
+    const stepTimeSec = (task.stepTimes && typeof task.stepTimes[index] === 'number')
+      ? task.stepTimes[index]
+      : (task.totalTime && task.steps.length > 0 ? Math.floor(task.totalTime / task.steps.length) : 0);
+
+    const timeBadge = document.createElement('button');
+    timeBadge.type = 'button';
+    timeBadge.className = 'step-time-badge';
+    timeBadge.title = 'Editar minutos de este paso';
+    timeBadge.textContent = formatStepTimeBadge(stepTimeSec);
+    timeBadge.addEventListener('click', (e) => {
+      e.stopPropagation();
+      inlineEditStepTime(task, index, timeBadge);
+    });
+
     const deleteStepBtn = document.createElement('button');
     deleteStepBtn.textContent = '🗑';
     deleteStepBtn.addEventListener('click', () => {
@@ -1562,7 +1621,7 @@ function buildPendingTaskItem(folder, task) {
       });
     });
 
-    stepButtons.append(deleteStepBtn);
+    stepButtons.append(timeBadge, deleteStepBtn);
     stepDiv.append(stepTextSpan, stepButtons);
     taskStepsDiv.appendChild(stepDiv);
   });
@@ -1769,13 +1828,85 @@ function restoreFromMiniFolder(folder, taskId) {
 /************************************************************************
  * PASOS
  ************************************************************************/
-function recalcStepTimes(task) {
+function formatStepTimeBadge(sec) {
+  if (!sec || sec <= 0) return '⏱ 0m';
+  if (sec < 60) return `⏱ ${sec}s`;
+  const mins = Math.round((sec / 60) * 10) / 10;
+  return `⏱ ${mins}m`;
+}
+
+function setStepTimeMinutes(task, stepIndex, minutes) {
+  if (!task || !Array.isArray(task.steps) || stepIndex < 0 || stepIndex >= task.steps.length) return false;
+  if (!Array.isArray(task.stepTimes) || task.stepTimes.length !== task.steps.length) {
+    const fallback = (task.totalTime && task.steps.length > 0) ? Math.floor(task.totalTime / task.steps.length) : 0;
+    task.stepTimes = task.steps.map((_, idx) =>
+      (task.stepTimes && typeof task.stepTimes[idx] === 'number') ? task.stepTimes[idx] : fallback
+    );
+  }
+  const sec = Math.max(0, Math.round(Number(minutes) * 60));
+  task.stepTimes[stepIndex] = sec;
+  task.hasCustomStepTimes = true;
+  if (!task.totalTime && sec > 0) {
+    task.totalTime = task.stepTimes.reduce((a, b) => a + (Number(b) || 0), 0);
+  }
+  saveDataToLocalStorage();
+  return true;
+}
+
+function inlineEditStepTime(task, stepIndex, badgeBtn) {
+  const currentSec = (task.stepTimes && typeof task.stepTimes[stepIndex] === 'number') ? task.stepTimes[stepIndex] : 0;
+  const currentMin = Math.round((currentSec / 60) * 10) / 10;
+
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.step = '0.5';
+  input.min = '0';
+  input.className = 'step-time-input';
+  input.value = String(currentMin);
+  input.title = 'Minutos para este paso';
+
+  let committed = false;
+  const commit = () => {
+    if (committed) return;
+    committed = true;
+    const val = parseFloat(input.value);
+    if (!isNaN(val) && val >= 0) {
+      setStepTimeMinutes(task, stepIndex, val);
+    }
+    renderTasks();
+  };
+
+  input.addEventListener('click', (e) => e.stopPropagation());
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') commit();
+    if (e.key === 'Escape') {
+      committed = true;
+      renderTasks();
+    }
+  });
+  input.addEventListener('blur', commit);
+
+  badgeBtn.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+function recalcStepTimes(task, force = false) {
+  if (!task || !Array.isArray(task.steps)) return;
+  if (!force && task.hasCustomStepTimes && Array.isArray(task.stepTimes) && task.stepTimes.length === task.steps.length) {
+    return;
+  }
   if (task.totalTime && task.steps.length > 0) {
     const allocated = Math.floor(task.totalTime / task.steps.length);
     task.stepTimes = [];
     for (let i = 0; i < task.steps.length; i++) {
       task.stepTimes.push(allocated);
     }
+    task.hasCustomStepTimes = false;
+  } else {
+    task.stepTimes = task.steps.map(() => 0);
+    task.hasCustomStepTimes = false;
   }
 }
 
@@ -1784,8 +1915,10 @@ function addNewStep(task, inputElem) {
   if (text) {
     task.steps.push(text);
     inputElem.value = '';
-    if (task.totalTime) {
-      recalcStepTimes(task);
+    if (task.hasCustomStepTimes && Array.isArray(task.stepTimes)) {
+      task.stepTimes.push(0);
+    } else if (task.totalTime) {
+      recalcStepTimes(task, true);
     }
     saveDataToLocalStorage();
     renderTasks();
@@ -1801,8 +1934,10 @@ function addNewStep(task, inputElem) {
 
 function removeStep(task, stepIndex) {
   task.steps.splice(stepIndex, 1);
-  if (task.totalTime) {
-    recalcStepTimes(task);
+  if (task.hasCustomStepTimes && Array.isArray(task.stepTimes)) {
+    task.stepTimes.splice(stepIndex, 1);
+  } else if (task.totalTime) {
+    recalcStepTimes(task, true);
   }
   saveDataToLocalStorage();
   renderTasks();
@@ -1862,6 +1997,7 @@ function toggleTaskStepsVisibility(task, stepsDiv, toggleBtn) {
 /************************************************************************
  * PRESENTACIÓN (MODO TIKTOK VERTICAL & ESCALA DINÁMICA)
  ************************************************************************/
+const ACTIVE_PRESENTATION_KEY = 'efectivaActivePresentationV1';
 let isPresentationTransitioning = false;
 let presentationTouchStartY = 0;
 let presentationTouchStartX = 0;
@@ -1869,11 +2005,82 @@ let presentationTouchCurrentY = 0;
 let presentationTouchStartTime = 0;
 let isPresentationDragging = false;
 let lastSwipeTime = 0;
+let presentationStepStartedAt = null;
+let presentationBaseSeconds = 0;
+let presentationAlarmFired = false;
 
-function startPresentation(task) {
+function saveActivePresentationState() {
+  if (!presentationOpen || !currentPresentationTask) return;
+  try {
+    const state = {
+      folderId: currentFolderId,
+      taskId: currentPresentationTask.id,
+      currentStepIndex,
+      hasTotalTime: Boolean(currentPresentationTask.totalTime),
+      baseStepSeconds: presentationBaseSeconds,
+      stepStartedAt: presentationStepStartedAt,
+      alarmFired: presentationAlarmFired,
+      folderPlayFolderId,
+      folderPlayQueue,
+      folderPlayIndex,
+      folderPlayOriginalLength,
+      savedAt: Date.now()
+    };
+    localStorage.setItem(ACTIVE_PRESENTATION_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn('No se pudo guardar estado de presentación:', e);
+  }
+}
+
+function clearActivePresentationState() {
+  try {
+    localStorage.removeItem(ACTIVE_PRESENTATION_KEY);
+  } catch (e) {}
+}
+
+function restoreActivePresentationIfAny() {
+  try {
+    const raw = localStorage.getItem(ACTIVE_PRESENTATION_KEY);
+    if (!raw) return;
+    const state = JSON.parse(raw);
+    if (!state || !state.taskId || !state.folderId) {
+      clearActivePresentationState();
+      return;
+    }
+    const folder = folders.find(f => f.id === state.folderId);
+    if (!folder) {
+      clearActivePresentationState();
+      return;
+    }
+    const task = (folder.tasks || []).find(t => t.id === state.taskId);
+    if (!task || !task.steps || !task.steps.length) {
+      clearActivePresentationState();
+      return;
+    }
+
+    currentFolderId = folder.id;
+    folderPlayFolderId = state.folderPlayFolderId || null;
+    folderPlayQueue = Array.isArray(state.folderPlayQueue) ? state.folderPlayQueue : [];
+    folderPlayIndex = typeof state.folderPlayIndex === 'number' ? state.folderPlayIndex : 0;
+    folderPlayOriginalLength = typeof state.folderPlayOriginalLength === 'number' ? state.folderPlayOriginalLength : 0;
+
+    // Mostrar la carpeta detrás del modal para que al cerrar quede en el lugar correcto
+    if (typeof openFolder === 'function') {
+      openFolder(folder.id);
+    }
+    startPresentation(task, state);
+  } catch (e) {
+    console.warn('Error restaurando presentación:', e);
+    clearActivePresentationState();
+  }
+}
+
+function startPresentation(task, restoredState = null) {
   if (!task.steps || !task.steps.length) return;
   presentationSteps = task.steps;
-  currentStepIndex = task.currentStepIndex || 0;
+  currentStepIndex = restoredState
+    ? Math.max(0, Math.min(task.steps.length - 1, restoredState.currentStepIndex || 0))
+    : (task.currentStepIndex || 0);
   presentationOpen = true;
   currentPresentationTask = task;
   isPresentationTransitioning = false;
@@ -1883,13 +2090,41 @@ function startPresentation(task) {
     if (!task.stepTimes || task.stepTimes.length !== task.steps.length) {
       recalcStepTimes(task);
     }
-    currentStepCountdown = task.stepTimes[currentStepIndex];
+    if (restoredState && typeof restoredState.baseStepSeconds === 'number' && restoredState.stepStartedAt) {
+      presentationBaseSeconds = restoredState.baseStepSeconds;
+      presentationStepStartedAt = restoredState.stepStartedAt;
+      presentationAlarmFired = Boolean(restoredState.alarmFired);
+      const elapsed = Math.floor((Date.now() - presentationStepStartedAt) / 1000);
+      currentStepCountdown = presentationBaseSeconds - elapsed;
+    } else {
+      presentationBaseSeconds = task.stepTimes[currentStepIndex] || 0;
+      presentationStepStartedAt = Date.now();
+      presentationAlarmFired = false;
+      currentStepCountdown = presentationBaseSeconds;
+    }
+  } else {
+    if (restoredState && typeof restoredState.baseStepSeconds === 'number' && restoredState.stepStartedAt) {
+      presentationBaseSeconds = restoredState.baseStepSeconds;
+      presentationStepStartedAt = restoredState.stepStartedAt;
+      const elapsed = Math.floor((Date.now() - presentationStepStartedAt) / 1000);
+      timerSeconds = presentationBaseSeconds + elapsed;
+    } else {
+      presentationBaseSeconds = 0;
+      presentationStepStartedAt = Date.now();
+      timerSeconds = 0;
+    }
+    presentationAlarmFired = false;
   }
 
+  unlockStepAlarmAudio();
+  if ('Notification' in window && Notification.permission === 'default') {
+    try { Notification.requestPermission(); } catch (e) {}
+  }
   presentationModal.style.display = 'flex';
   showPresentationStep('none');
   startTimer();
   addMinimizeButton();
+  saveActivePresentationState();
 
   // Limpiar y registrar listeners de interacción (click y swipe vertical)
   presentationModal.removeEventListener('click', handleFinalClick);
@@ -2194,26 +2429,44 @@ function nextStep(animated = true) {
 }
 
 function advanceStepData() {
+  syncPresentationClock();
   if (currentPresentationTask && currentPresentationTask.totalTime) {
-    let leftover = currentStepCountdown;
+    const leftover = currentStepCountdown;
     currentStepIndex++;
-    let baseTime = (currentPresentationTask.stepTimes && currentPresentationTask.stepTimes[currentStepIndex]) || 0;
-    currentStepCountdown = baseTime + leftover;
+    const baseTime = (currentPresentationTask.stepTimes && currentPresentationTask.stepTimes[currentStepIndex]) || 0;
+    presentationBaseSeconds = baseTime + leftover;
+    currentStepCountdown = presentationBaseSeconds;
   } else {
     currentStepIndex++;
   }
+  presentationStepStartedAt = Date.now();
+  presentationAlarmFired = false;
+  stopStepOvertimeAlarm();
+  if (currentPresentationTask) {
+    currentPresentationTask.currentStepIndex = currentStepIndex;
+  }
+  saveActivePresentationState();
 }
 
 function retreatStepData() {
+  syncPresentationClock();
   if (currentPresentationTask && currentPresentationTask.totalTime) {
     const currentBaseTime = (currentPresentationTask.stepTimes && currentPresentationTask.stepTimes[currentStepIndex]) || 0;
     currentStepIndex--;
     const timeUsed = currentBaseTime - currentStepCountdown;
     const prevBaseTime = (currentPresentationTask.stepTimes && currentPresentationTask.stepTimes[currentStepIndex]) || 0;
-    currentStepCountdown = prevBaseTime - timeUsed;
+    presentationBaseSeconds = prevBaseTime - timeUsed;
+    currentStepCountdown = presentationBaseSeconds;
   } else {
     currentStepIndex--;
   }
+  presentationStepStartedAt = Date.now();
+  presentationAlarmFired = false;
+  stopStepOvertimeAlarm();
+  if (currentPresentationTask) {
+    currentPresentationTask.currentStepIndex = currentStepIndex;
+  }
+  saveActivePresentationState();
 }
 
 /**
@@ -2456,24 +2709,140 @@ function handleFinalClick(e) {
   pickRandomRewardAndShow(afterReward);
 }
 
-function startTimer() {
-  if (currentPresentationTask && currentPresentationTask.totalTime) {
-    timerDisplay.textContent = formatTime(currentStepCountdown);
-  } else {
-    timerSeconds = 0;
-    timerDisplay.textContent = formatTime(timerSeconds);
-  }
-  if (timerInterval) clearInterval(timerInterval);
-  timerInterval = setInterval(() => {
-    if (currentPresentationTask && currentPresentationTask.totalTime) {
-      // Se decrementa el contador sin avanzar automáticamente al siguiente paso
-      currentStepCountdown--;
-      timerDisplay.textContent = formatTime(currentStepCountdown);
-    } else {
-      timerSeconds++;
-      timerDisplay.textContent = formatTime(timerSeconds);
+let stepAlarmAudioCtx = null;
+let stepAlarmBeepInterval = null;
+let stepAlarmActive = false;
+
+function unlockStepAlarmAudio() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!stepAlarmAudioCtx) {
+      stepAlarmAudioCtx = new AudioCtx();
     }
-  }, 1000);
+    if (stepAlarmAudioCtx.state === 'suspended') {
+      stepAlarmAudioCtx.resume();
+    }
+  } catch (e) {}
+}
+
+function playStepAlarmChime() {
+  try {
+    unlockStepAlarmAudio();
+    if (!stepAlarmAudioCtx) return;
+    const now = stepAlarmAudioCtx.currentTime;
+    // Dos tonos claros tipo alarma de enfoque
+    [0, 0.22].forEach((offset, idx) => {
+      const osc = stepAlarmAudioCtx.createOscillator();
+      const gain = stepAlarmAudioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(idx === 0 ? 880 : 1046.5, now + offset);
+      gain.gain.setValueAtTime(0.001, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.28, now + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.19);
+      osc.connect(gain);
+      gain.connect(stepAlarmAudioCtx.destination);
+      osc.start(now + offset);
+      osc.stop(now + offset + 0.2);
+    });
+  } catch (e) {}
+}
+
+function triggerStepOvertimeAlarm() {
+  if (presentationAlarmFired) return;
+  presentationAlarmFired = true;
+  stepAlarmActive = true;
+  saveActivePresentationState();
+
+  // Sonido inmediato y repetición suave cada 2.5s hasta silenciar o cambiar de paso
+  playStepAlarmChime();
+  if (stepAlarmBeepInterval) clearInterval(stepAlarmBeepInterval);
+  stepAlarmBeepInterval = setInterval(() => {
+    if (!presentationOpen || !stepAlarmActive) {
+      stopStepOvertimeAlarm();
+      return;
+    }
+    playStepAlarmChime();
+  }, 2500);
+
+  if (navigator.vibrate) {
+    try { navigator.vibrate([300, 150, 300, 150, 400]); } catch (e) {}
+  }
+
+  showSilenceAlarmButton(true);
+
+  // Notificación del sistema (útil si el teléfono está bloqueado o en otra app)
+  const stepText = presentationSteps[currentStepIndex] || 'Paso actual';
+  const msg = `⏰ Tiempo agotado en: "${stepText}" (contando en negativo)`;
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then(reg => {
+          reg.showNotification('Efectiva — ¡Tiempo agotado!', {
+            body: msg,
+            icon: './icon-192.png',
+            tag: 'efectiva-step-alarm',
+            renotify: true
+          });
+        }).catch(() => {});
+      } else {
+        new Notification('Efectiva — ¡Tiempo agotado!', { body: msg, icon: './icon-192.png' });
+      }
+    } catch (e) {}
+  }
+}
+
+function stopStepOvertimeAlarm() {
+  stepAlarmActive = false;
+  if (stepAlarmBeepInterval) {
+    clearInterval(stepAlarmBeepInterval);
+    stepAlarmBeepInterval = null;
+  }
+  showSilenceAlarmButton(false);
+}
+
+function showSilenceAlarmButton(visible) {
+  let btn = document.getElementById('silenceStepAlarmBtn');
+  if (visible) {
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'silenceStepAlarmBtn';
+      btn.className = 'silence-alarm-btn';
+      btn.textContent = '🔕 Silenciar alarma';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        stopStepOvertimeAlarm();
+      });
+      const bottomBar = presentationModal.querySelector('.presentation-bottom-bar');
+      if (bottomBar) bottomBar.prepend(btn);
+    }
+    btn.style.display = 'inline-flex';
+  } else if (btn) {
+    btn.style.display = 'none';
+  }
+}
+
+function syncPresentationClock() {
+  if (!presentationOpen || !currentPresentationTask || !presentationStepStartedAt) return;
+  const elapsed = Math.floor((Date.now() - presentationStepStartedAt) / 1000);
+  if (currentPresentationTask.totalTime) {
+    currentStepCountdown = presentationBaseSeconds - elapsed;
+    timerDisplay.textContent = formatTime(currentStepCountdown);
+    timerDisplay.classList.toggle('timer-overdue', currentStepCountdown <= 0);
+    if (currentStepCountdown <= 0 && !presentationAlarmFired) {
+      triggerStepOvertimeAlarm();
+    }
+  } else {
+    timerSeconds = presentationBaseSeconds + elapsed;
+    timerDisplay.textContent = formatTime(timerSeconds);
+    timerDisplay.classList.remove('timer-overdue');
+  }
+}
+
+function startTimer() {
+  syncPresentationClock();
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(syncPresentationClock, 250);
 }
 
 /************************************************************************
@@ -2671,7 +3040,13 @@ function closePresentation(force = false) {
   timerInterval = null;
   timerSeconds = 0;
   currentStepCountdown = 0;
+  presentationStepStartedAt = null;
+  presentationBaseSeconds = 0;
+  presentationAlarmFired = false;
+  stopStepOvertimeAlarm();
+  clearActivePresentationState();
   timerDisplay.textContent = '00:00';
+  timerDisplay.classList.remove('timer-overdue');
   presentationStep.textContent = '';
   // Limpiar estilos inline que pudieron haber sido seteados por showCongratulations
   presentationStep.style.fontSize = '';
@@ -2732,9 +3107,11 @@ function closePresentation(force = false) {
 }
 
 function formatTime(sec) {
-  const mins = Math.floor(sec / 60);
-  const secs = sec % 60;
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  const isNeg = sec < 0;
+  const abs = Math.abs(Math.trunc(sec));
+  const mins = Math.floor(abs / 60);
+  const secs = abs % 60;
+  return `${isNeg ? '-' : ''}${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 /************************************************************************
@@ -3295,86 +3672,17 @@ function closePresentation(skipHistory = false) {
 
 // [Duplicates removed: nextStep and prevStep are unified above]
 
-// AGREGAR HANDLER PARA VISIBILITYCHANGE
+// Sincronizar reloj real al volver de otra app o desbloquear la pantalla
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
-    // Guardar el momento en que la app se oculta
-    lastHiddenTime = Date.now();
+    if (presentationOpen) saveActivePresentationState();
   } else {
-    // Cuando se vuelve a ver la app, calcular el tiempo transcurrido en segundos
-    const elapsedSec = Math.floor((Date.now() - lastHiddenTime) / 1000);
-    // Si hay una presentación activa con temporizador, descontar el tiempo
-    if (presentationOpen && currentPresentationTask && currentPresentationTask.totalTime) {
-      currentStepCountdown = Math.max(0, currentStepCountdown - elapsedSec);
-      timerDisplay.textContent = formatTime(currentStepCountdown);
-    }
-    // (Opcional) Mostrar Notificación con el paso actual y tiempo restante
-    if (Notification.permission === "granted") {
-      const notificationOptions = {
-        body: `Paso: "${presentationSteps[currentStepIndex]}"\nTiempo restante: ${formatTime(currentStepCountdown)}`,
-        icon: "icon.png" // Asegúrate de tener un icono adecuado
-      };
-      new Notification("Actualización de Temporizador", notificationOptions);
-    } else if (Notification.permission !== "denied") {
-      Notification.requestPermission();
+    if (presentationOpen) {
+      syncPresentationClock();
+      if (wakeLock === null) requestWakeLock();
     }
   }
 });
-
-// Función para reiniciar la presentación de pasos al finalizar la tarea
-function resetPresentationSteps() {
-    const stepsList = document.getElementById('presentationStepsList');
-    if (stepsList) {
-        // Elimina la clase que resalta los pasos completados (por ejemplo, 'completed')
-        stepsList.querySelectorAll('li.completed').forEach(li => li.classList.remove('completed'));
-        // Opcional: limpiar completamente la lista
-        // stepsList.innerHTML = '';
-    }
-    // Reinicia la visualización del paso actual y el timer
-    const presentationStep = document.getElementById('presentationStep');
-    if (presentationStep) presentationStep.innerHTML = '';
-    const timerDisplay = document.getElementById('timerDisplay');
-    if (timerDisplay) timerDisplay.textContent = '00:00';
-}
-
-let presentationTimer = {
-    startTime: 0,
-    elapsedTime: 0,
-    previousStepTime: 0,
-    currentStepStartTime: 0
-};
-
-function handlePresentationNavigation(direction) {
-    const currentStep = getCurrentStep();
-    const previousStepTime = presentationTimer.previousStepTime;
-    const currentTime = Date.now();
-    const stepDuration = currentTime - presentationTimer.currentStepStartTime;
-
-    if (direction === 'next') {
-        presentationTimer.elapsedTime += stepDuration;
-    } else if (direction === 'prev') {
-        presentationTimer.elapsedTime -= stepDuration;
-    }
-
-    presentationTimer.currentStepStartTime = currentTime;
-    updateTimerDisplay(presentationTimer.elapsedTime);
-
-    // Actualizar el paso actual según la dirección
-    if (direction === 'next' && currentStep < presentationSteps.length - 1) {
-        setCurrentStep(currentStep + 1);
-    } else if (direction === 'prev' && currentStep > 0) {
-        setCurrentStep(currentStep - 1);
-    }
-}
-
-function updateTimerDisplay(elapsedTime) {
-    const minutes = Math.floor(Math.abs(elapsedTime) / 60000);
-    const seconds = Math.floor((Math.abs(elapsedTime) % 60000) / 1000);
-    const sign = elapsedTime < 0 ? '-' : '';
-    
-    const timerDisplay = document.getElementById('timerDisplay');
-    timerDisplay.textContent = `${sign}${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
 
 // Eventos de navegación con teclado para la presentación (TikTok style)
 document.addEventListener('keydown', (e) => {
@@ -3415,9 +3723,3 @@ function releaseWakeLock() {
   }
 }
 
-// Reiniciar el wake lock si la visibilidad de la página cambia.
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && wakeLock === null) {
-    requestWakeLock();
-  }
-});
