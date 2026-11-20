@@ -384,16 +384,30 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       description: 'Obtiene las estadísticas de XP total, nivel actual y racha de días consecutivos del usuario.',
       parameters: { type: 'object', properties: {}, required: [] } } },
     { type: 'function', function: { name: 'guardar_memoria_usuario',
-      description: 'Guarda o actualiza un recuerdo persistente a largo plazo sobre el usuario (sobrevive entre chats nuevos).',
+      description: 'Guarda un recuerdo persistente en 2 capas: es_nucleo=true (máx 8 hechos vitales siempre visibles) o es_nucleo=false (archivo histórico de 0 tokens recuperable con buscar_memoria_relevante).',
       parameters: {
         type: 'object',
         properties: {
           categoria: { type: 'string', description: 'patrones_tiempo | energia_horarios | motivos_retraso | preferencias | cuadridimensional | proyecto' },
-          clave: { type: 'string', description: 'Identificador corto único, ej: sesgo_investigacion o horario_pico' },
-          valor: { type: 'string', description: 'Información aprendida para recordar siempre' }
+          clave: { type: 'string', description: 'Identificador corto único' },
+          valor: { type: 'string', description: 'Información aprendida' },
+          es_nucleo: { type: 'boolean', description: 'true = Capa 1 Núcleo (siempre visible); false = Capa 2 Archivo (0 tokens hasta consultarlo)' }
         },
         required: ['categoria', 'clave', 'valor']
       } } },
+    { type: 'function', function: { name: 'buscar_memoria_relevante',
+      description: 'Busca en la memoria histórica (Capa 1 + Capa 2) solo los recuerdos relevantes para la consulta actual (ahorra tokens).',
+      parameters: {
+        type: 'object',
+        properties: {
+          consulta: { type: 'string', description: 'Tema, proyecto o palabra clave a recordar' },
+          top_k: { type: 'integer', description: 'Máximo de recuerdos a traer (default 5)' }
+        },
+        required: ['consulta']
+      } } },
+    { type: 'function', function: { name: 'obtener_contexto_vivo',
+      description: 'Tool ultracompacta (<150 tokens): devuelve hora local exacta, presentación/paso activo en pantalla y los próximos 3 bloques programados del día.',
+      parameters: { type: 'object', properties: {}, required: [] } } },
     { type: 'function', function: { name: 'consultar_memoria_usuario',
       description: 'Consulta los recuerdos guardados del usuario, opcionalmente filtrados por categoría.',
       parameters: { type: 'object', properties: { categoria: { type: ['string', 'null'] } }, required: [] } } },
@@ -1719,15 +1733,17 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       };
     },
 
-    guardar_memoria_usuario({ categoria, clave, valor }) {
+    guardar_memoria_usuario({ categoria, clave, valor, es_nucleo }) {
       const cat = String(categoria || 'preferencias').trim();
       const k = String(clave || '').trim();
       const v = String(valor || '').trim();
+      const isCore = (es_nucleo !== undefined) ? !!es_nucleo : (cat === 'preferencias' || cat === 'energia_horarios' || cat === 'cuadridimensional');
       if (!k || !v) return { ok: false, error: 'clave y valor son obligatorios' };
       const list = loadAgentMemory();
       const existing = list.find(m => m.categoria === cat && m.clave === k);
       if (existing) {
         existing.valor = v;
+        existing.es_nucleo = isCore;
         existing.updatedAt = new Date().toISOString();
       } else {
         list.unshift({
@@ -1735,11 +1751,66 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
           categoria: cat,
           clave: k,
           valor: v,
+          es_nucleo: isCore,
           updatedAt: new Date().toISOString()
         });
       }
       saveAgentMemory(list);
-      return { ok: true, mensaje: `Memoria guardada [${cat}/${k}].`, total_memorias: list.length };
+      return { ok: true, mensaje: `Memoria guardada [${cat}/${k}] (${isCore ? 'Capa 1 Núcleo' : 'Capa 2 Archivo'}).`, total_memorias: list.length };
+    },
+
+    buscar_memoria_relevante({ consulta, top_k }) {
+      const q = String(consulta || '').toLowerCase().trim();
+      const k = Math.max(1, Math.min(15, Number(top_k) || 5));
+      const list = loadAgentMemory();
+      if (!q) return { ok: true, recuerdos: list.slice(0, k) };
+
+      const terms = q.split(/\s+/).filter(Boolean);
+      const scored = list.map(m => {
+        const hay = `${m.categoria} ${m.clave} ${m.valor}`.toLowerCase();
+        let score = 0;
+        terms.forEach(t => { if (hay.includes(t)) score += (m.clave.toLowerCase().includes(t) ? 3 : 1); });
+        return { item: m, score };
+      }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
+
+      return {
+        ok: true,
+        consulta: q,
+        total_coincidencias: scored.length,
+        recuerdos: scored.slice(0, k).map(x => x.item)
+      };
+    },
+
+    obtener_contexto_vivo() {
+      const now = new Date();
+      const pad2 = n => String(n).padStart(2, '0');
+      const ahoraLocal = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      let tz = 'local';
+      try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || tz; } catch (e) {}
+
+      const pres = (typeof presentationOpen !== 'undefined' && presentationOpen && typeof currentPresentationTask !== 'undefined' && currentPresentationTask)
+        ? {
+            tarea: currentPresentationTask.name,
+            paso: (typeof currentStepIndex !== 'undefined' ? currentStepIndex + 1 : 1) + '/' + (typeof presentationSteps !== 'undefined' ? presentationSteps.length : 1),
+            paso_texto: (typeof presentationSteps !== 'undefined' && presentationSteps[currentStepIndex]) ? (presentationSteps[currentStepIndex].text || presentationSteps[currentStepIndex]) : '',
+            seg_restantes: currentPresentationTask.totalTime ? ((typeof currentStepCountdown !== 'undefined') ? currentStepCountdown : 0) : null
+          }
+        : null;
+
+      const rules = (typeof automationRules !== 'undefined' && Array.isArray(automationRules)) ? automationRules : [];
+      const proximos = rules
+        .filter(r => r.activa !== false && r.evento === 'hora_programada' && r.condicion && r.condicion.hora)
+        .map(r => {
+          const [h, m] = String(r.condicion.hora).split(':').map(Number);
+          return { hora: r.condicion.hora, mins: (h * 60 + m), accion: r.accion_automatica, nombre: r.parametros_accion?.nombre || r.parametros_accion?.tarea_id || '' };
+        })
+        .filter(x => !isNaN(x.mins) && x.mins >= nowMin)
+        .sort((a, b) => a.mins - b.mins)
+        .slice(0, 3)
+        .map(({ hora, accion, nombre }) => ({ hora, accion, nombre }));
+
+      return { ok: true, ahora_local: ahoraLocal, zona_horaria: tz, presentacion_activa: pres, proximos_bloques: proximos };
     },
 
     consultar_memoria_usuario({ categoria }) {
@@ -1846,10 +1917,30 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       let texto = '';
       let fuente = '';
 
-      // 1) Intentar búsqueda en línea vía OpenRouter :online usando la API key actual
-      if (AI_CONFIG.apiKey) {
+      // 1) Motor independiente del modelo: Jina Search (s.jina.ai) — sin API key y compatible con cualquier LLM
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 14000);
+        const jinaSearchUrl = 'https://s.jina.ai/' + encodeURIComponent(q);
+        const res = await fetch(jinaSearchUrl, {
+          headers: { 'Accept': 'text/plain' },
+          signal: controller.signal
+        });
+        clearTimeout(timer);
+        if (res.ok) {
+          const body = (await res.text()).trim();
+          if (body && body.length > 40) {
+            texto = body.slice(0, 5000);
+            fuente = 'jina_search';
+          }
+        }
+      } catch (e) {}
+
+      // 2) Fallback: OpenRouter :online
+      if (!texto && AI_CONFIG.apiKey) {
         try {
-          const onlineModel = AI_CONFIG.model.includes(':online') ? AI_CONFIG.model : (AI_CONFIG.model + ':online');
+          const baseModel = AI_CONFIG.model.replace(/:free$/i, '').replace(/:online$/i, '');
+          const onlineModel = baseModel + ':online';
           const res = await fetch(AI_CONFIG.baseUrl, {
             method: 'POST',
             headers: {
@@ -1876,22 +1967,25 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
         } catch (e) {}
       }
 
-      // 2) Fallback open-source gratuito sin API key: Wikipedia REST / Search API (es)
+      // 3) Fallback gratuito sin API key: Wikipedia ES / EN
       if (!texto) {
-        try {
-          const wpUrl = 'https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=' + encodeURIComponent(q) + '&format=json&origin=*&srlimit=4';
-          const r = await fetch(wpUrl);
-          if (r.ok) {
-            const j = await r.json();
-            const hits = (j?.query?.search || []).map(h =>
-              '- **' + h.title + '**: ' + h.snippet.replace(/<[^>]+>/g, '') + ' (https://es.wikipedia.org/wiki/' + encodeURIComponent(h.title.replace(/ /g, '_')) + ')'
-            );
-            if (hits.length > 0) {
-              texto = hits.join('\n');
-              fuente = 'wikipedia_api';
+        for (const lang of ['es', 'en']) {
+          try {
+            const wpUrl = `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=` + encodeURIComponent(q) + '&format=json&origin=*&srlimit=4';
+            const r = await fetch(wpUrl);
+            if (r.ok) {
+              const j = await r.json();
+              const hits = (j?.query?.search || []).map(h =>
+                '- **' + h.title + '**: ' + h.snippet.replace(/<[^>]+>/g, '') + ` (https://${lang}.wikipedia.org/wiki/` + encodeURIComponent(h.title.replace(/ /g, '_')) + ')'
+              );
+              if (hits.length > 0) {
+                texto = hits.join('\n');
+                fuente = 'wikipedia_' + lang;
+                break;
+              }
             }
-          }
-        } catch (e) {}
+          } catch (e) {}
+        }
       }
 
       if (!texto) {
@@ -2020,10 +2114,12 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       const cantFin = (f.finished || []).length;
       return `- ${f.name} (ID: ${f.id}) [${cantTareas} tareas pdt, ${cantFin} fin]${f.isDefaultRewards ? ' (Recompensas)' : ''}`;
     }).join('\n');
-    const mems = loadAgentMemory().slice(0, 20);
-    const memBlock = mems.length > 0
-      ? '\n\nMEMORIA PERSISTENTE DEL USUARIO (' + mems.length + '):\n' + mems.map(m => `- [${m.categoria}] ${m.clave}: ${m.valor}`).join('\n')
-      : '\n\nMEMORIA PERSISTENTE DEL USUARIO: (Aún vacía; guarda patrones y preferencias relevantes con guardar_memoria_usuario).';
+    const allMems = loadAgentMemory();
+    const coreMems = allMems.filter(m => m.es_nucleo !== false).slice(0, 8);
+    const archiveCount = Math.max(0, allMems.length - coreMems.length);
+    const memBlock = coreMems.length > 0
+      ? '\n\nMEMORIA NÚCLEO DEL USUARIO (Capa 1, ' + coreMems.length + '):\n' + coreMems.map(m => `- [${m.categoria}] ${m.clave}: ${m.valor}`).join('\n') + (archiveCount > 0 ? `\n(Archivo Capa 2: ${archiveCount} recuerdos adicionales disponibles con buscar_memoria_relevante)` : '')
+      : '\n\nMEMORIA NÚCLEO DEL USUARIO: (Aún vacía; guarda hechos vitales con es_nucleo=true o archivo con es_nucleo=false).' + (archiveCount > 0 ? ` (Archivo Capa 2: ${archiveCount} recuerdos)` : '');
     return '\n\nESTADO ACTUAL EN TIEMPO REAL EN LA APP (' + folders.length + ' carpetas en total):\n' + (lista || '(Sin carpetas)') + memBlock;
   }
 
