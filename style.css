@@ -785,11 +785,29 @@ header {
   padding: 8px;
   justify-content: center;
 }
-.presentation-modal.minimized .presentation-header-bar,
+.presentation-modal.minimized .presentation-task-info,
+.presentation-modal.minimized #presentationAudioCoachBtn,
 .presentation-modal.minimized .presentation-progress-bar-container,
 .presentation-modal.minimized .presentation-step-counter,
 .presentation-modal.minimized .presentation-swipe-hint {
   display: none !important;
+}
+.presentation-modal.minimized .presentation-header-bar {
+  justify-content: flex-end;
+  margin-bottom: 2px;
+  z-index: 20;
+}
+.presentation-modal.minimized .presentation-header-actions button {
+  padding: 3px 9px;
+  font-size: 11px;
+}
+.close-pres-btn {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+.close-pres-btn:hover {
+  background: rgba(239, 68, 68, 0.4);
 }
 .presentation-modal.minimized .presentation-card-wrapper {
   margin: 0;

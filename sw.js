@@ -1,4 +1,4 @@
-const CACHE = 'efectiva-v7';
+const CACHE = 'efectiva-v8';
 const APP_SHELL = [
   './',
   './index.html',

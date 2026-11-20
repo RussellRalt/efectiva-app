@@ -2190,7 +2190,7 @@ function updatePresentationUI() {
  * Click / Tap: si se pulsa a la derecha avanza, a la izquierda retrocede.
  */
 function handlePresentationClick(e) {
-  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
   if (isPresentationMinimized || isPresentationTransitioning) return;
 
   // Si acaba de ocurrir un swipe, descartar el clic sintético que emite el navegador móvil
@@ -2214,7 +2214,7 @@ function handlePresentationClick(e) {
  * Deslizar hacia abajo (Swipe Down) -> Regresa al paso anterior
  */
 function handleTouchStart(e) {
-  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
   if (isPresentationMinimized || isPresentationTransitioning) return;
 
   if (e.touches && e.touches[0]) {
@@ -2255,7 +2255,7 @@ function handleTouchMove(e) {
 }
 
 function handleTouchEnd(e) {
-  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
   if (isPresentationMinimized) return;
 
   if (isPresentationDragging) {
@@ -2311,7 +2311,7 @@ let mouseStartTime = 0;
 
 function handleMouseDown(e) {
   if (e.button !== 0) return;
-  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
   if (isPresentationMinimized || isPresentationTransitioning) return;
   mouseStartY = e.clientY;
   mouseStartX = e.clientX;
@@ -2636,7 +2636,7 @@ function showCongratulations() {
 
 function handleFinalClick(e) {
   // Si el click fue en el botón de minimizar, no hacer nada
-  if (e.target && e.target.closest && e.target.closest('#minimizePresentationBtn')) return;
+  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn'))) return;
 
   // Removemos el listener para evitar llamadas duplicadas
   presentationModal.removeEventListener('click', handleFinalClick);
@@ -2913,7 +2913,7 @@ function setupMinimizedDrag() {
 
   function onPipPointerDown(e) {
     // No iniciar drag si el pointerdown fue en el botón maximizar
-    if (e.target && e.target.closest && e.target.closest('#minimizePresentationBtn')) return;
+    if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn'))) return;
     // Solo primary pointer (evita multi-touch accidental)
     if (e.pointerType === 'mouse' && e.button !== 0) return;
 
@@ -3000,6 +3000,9 @@ function teardownMinimizedDrag() {
 }
 
 function addMinimizeButton() {
+  const headerActions = presentationModal.querySelector('.presentation-header-actions');
+  const container = headerActions || presentationModal.querySelector('.presentation-content') || presentationModal;
+
   if (!document.getElementById('minimizePresentationBtn')) {
     const btn = document.createElement('button');
     btn.id = 'minimizePresentationBtn';
@@ -3012,18 +3015,24 @@ function addMinimizeButton() {
       btn.textContent = isPresentationMinimized ? '🗖 Maximizar' : '🗕 Minimizar';
     });
 
-    const headerActions = presentationModal.querySelector('.presentation-header-actions');
-    if (headerActions) {
-      headerActions.appendChild(btn);
-      btn.style.position = 'static';
-    } else {
-      const presentationContent = presentationModal.querySelector('.presentation-content');
-      if (presentationContent) {
-        presentationContent.appendChild(btn);
-      } else {
-        presentationModal.appendChild(btn);
-      }
-    }
+    container.appendChild(btn);
+    if (headerActions) btn.style.position = 'static';
+  }
+
+  if (!document.getElementById('closePresentationBtn')) {
+    const closeBtn = document.createElement('button');
+    closeBtn.id = 'closePresentationBtn';
+    closeBtn.className = 'audio-coach-btn close-pres-btn';
+    closeBtn.title = 'Cerrar presentación';
+    closeBtn.textContent = '✖';
+
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closePresentation(true);
+    });
+
+    container.appendChild(closeBtn);
+    if (headerActions) closeBtn.style.position = 'static';
   }
 }
 
@@ -3067,6 +3076,8 @@ function closePresentation(force = false) {
   presentationModal.style.transform = '';
   const minBtn = document.getElementById('minimizePresentationBtn');
   if (minBtn) minBtn.remove();
+  const closeBtn = document.getElementById('closePresentationBtn');
+  if (closeBtn) closeBtn.remove();
   // FIX: limpiar TODOS los listeners para que no queden colgados
   presentationModal.removeEventListener('click', handlePresentationClick);
   presentationModal.removeEventListener('click', handleFinalClick);
