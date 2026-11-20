@@ -1233,8 +1233,8 @@ body.cyberpunk-theme .mini-folder-title {
   --ai-border: rgba(255, 255, 255, 0.10);
   --ai-input-bg: rgba(255, 255, 255, 0.05);
   --ai-input-border: rgba(255, 255, 255, 0.15);
-  --ai-accent-1: #667eea;
-  --ai-accent-2: #764ba2;
+  --ai-accent-1: #0ea5e9;
+  --ai-accent-2: #3b82f6;
   --ai-user-msg-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   --ai-tool-msg-bg: rgba(76, 175, 80, 0.15);
   --ai-tool-msg-border: #4caf50;
@@ -1259,8 +1259,8 @@ body.light-theme {
   --ai-border: rgba(0, 0, 0, 0.10);
   --ai-input-bg: rgba(0, 0, 0, 0.04);
   --ai-input-border: rgba(0, 0, 0, 0.15);
-  --ai-accent-1: #5a67d8;
-  --ai-accent-2: #6b46c1;
+  --ai-accent-1: #2563eb;
+  --ai-accent-2: #0284c7;
   --ai-sidebar-bg: #f5f5f7;
   --ai-input-bar-bg: #fafafa;
   --ai-list-item-bg: rgba(0, 0, 0, 0.04);
@@ -2693,4 +2693,272 @@ body.light-theme .step-buttons button.step-time-badge {
 body.light-theme .step-time-input {
   background: #fff;
   color: #0f172a;
+}
+
+
+/* === MODERNIZACIÓN VISUAL UNIFICADA (DESIGN TOKENS) === */
+:root {
+  --ef-bg: #0b1120;
+  --ef-bg-gradient: radial-gradient(circle at 50% 0%, rgba(14, 165, 233, 0.12) 0%, transparent 55%), #0b1120;
+  --ef-surface: rgba(30, 41, 59, 0.78);
+  --ef-surface-elevated: rgba(30, 41, 59, 0.94);
+  --ef-surface-border: rgba(148, 163, 184, 0.16);
+  --ef-text: #f1f5f9;
+  --ef-text-muted: #94a3b8;
+  --ef-accent: #38bdf8;
+  --ef-accent-strong: #2563eb;
+  --ef-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.55);
+  --ef-btn-bg: rgba(51, 65, 85, 0.65);
+  --ef-btn-hover: rgba(71, 85, 105, 0.9);
+}
+
+body.light-theme {
+  --ef-bg: #f1f5f9;
+  --ef-bg-gradient: radial-gradient(circle at 50% 0%, rgba(37, 99, 235, 0.08) 0%, transparent 55%), #f1f5f9;
+  --ef-surface: #ffffff;
+  --ef-surface-elevated: #ffffff;
+  --ef-surface-border: rgba(15, 23, 42, 0.09);
+  --ef-text: #0f172a;
+  --ef-text-muted: #64748b;
+  --ef-accent: #2563eb;
+  --ef-accent-strong: #1d4ed8;
+  --ef-shadow: 0 8px 24px -6px rgba(15, 23, 42, 0.08);
+  --ef-btn-bg: #e2e8f0;
+  --ef-btn-hover: #cbd5e1;
+}
+
+body.cyberpunk-theme {
+  --ef-bg: #070312;
+  --ef-bg-gradient: radial-gradient(circle at 80% 10%, rgba(255, 0, 144, 0.14) 0%, transparent 45%), radial-gradient(circle at 15% 80%, rgba(0, 245, 212, 0.12) 0%, transparent 45%), #070312;
+  --ef-surface: rgba(18, 9, 36, 0.88);
+  --ef-surface-elevated: rgba(27, 13, 51, 0.95);
+  --ef-surface-border: rgba(255, 42, 133, 0.4);
+  --ef-text: #e0fbfc;
+  --ef-text-muted: #f472b6;
+  --ef-accent: #00f5d4;
+  --ef-accent-strong: #ff2a85;
+  --ef-shadow: 0 0 24px rgba(255, 42, 133, 0.22);
+  --ef-btn-bg: rgba(45, 18, 72, 0.85);
+  --ef-btn-hover: rgba(75, 26, 115, 0.95);
+}
+
+* {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+body {
+  background: var(--ef-bg-gradient) !important;
+  background-color: var(--ef-bg) !important;
+  color: var(--ef-text) !important;
+  transition: background 0.3s ease, color 0.25s ease;
+}
+
+header {
+  background: linear-gradient(135deg, #0b162e 0%, #102a54 55%, #133c70 100%);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.22);
+}
+
+body.light-theme header {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
+  color: #0f172a !important;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 2px 14px rgba(15, 23, 42, 0.05);
+}
+
+body.cyberpunk-theme header {
+  background: linear-gradient(135deg, #0b031d 0%, #1d0836 100%) !important;
+  border-bottom: 1px solid rgba(255, 42, 133, 0.45);
+  box-shadow: 0 4px 24px rgba(255, 42, 133, 0.2);
+}
+
+/* Botones de cabecera e inputs modernos */
+.icon-button {
+  background: var(--ef-btn-bg);
+  border: 1px solid var(--ef-surface-border);
+  color: var(--ef-text);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  transition: transform 0.16s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+.icon-button:hover {
+  background: var(--ef-btn-hover);
+  border-color: var(--ef-accent);
+  transform: translateY(-1px);
+}
+
+.new-folder-input,
+#newTaskInput,
+#newTaskTimeInput,
+.new-step-input,
+#rewardInput {
+  background: var(--ef-surface) !important;
+  color: var(--ef-text) !important;
+  border: 1px solid var(--ef-surface-border) !important;
+  border-radius: 12px !important;
+  padding: 0.65rem 0.9rem !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.new-folder-input:focus,
+#newTaskInput:focus,
+#newTaskTimeInput:focus,
+.new-step-input:focus {
+  outline: none;
+  border-color: var(--ef-accent) !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
+}
+
+/* Tarjetas de Carpetas, Tareas y Pasos */
+.folder,
+.task,
+.trash-item {
+  background: var(--ef-surface);
+  border: 1px solid var(--ef-surface-border);
+  border-radius: 14px;
+  box-shadow: var(--ef-shadow);
+  backdrop-filter: blur(10px);
+  transition: transform 0.18s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.folder:hover {
+  border-color: rgba(56, 189, 248, 0.38);
+  transform: translateY(-1px);
+}
+.step-item {
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid var(--ef-surface-border);
+  border-radius: 10px;
+  padding: 0.42rem 0.55rem;
+}
+body.light-theme .step-item {
+  background: #f8fafc;
+}
+body.cyberpunk-theme .step-item {
+  background: rgba(14, 6, 30, 0.85);
+}
+
+.task-buttons button,
+.folder-options-btn,
+.step-buttons button,
+.trash-buttons button {
+  border-radius: 8px;
+  border: 1px solid var(--ef-surface-border);
+  background: var(--ef-btn-bg);
+  color: var(--ef-text);
+  transition: background-color 0.15s ease, transform 0.12s ease;
+}
+.task-buttons button:hover,
+.folder-options-btn:hover,
+.step-buttons button:hover {
+  background: var(--ef-btn-hover);
+  transform: scale(1.04);
+}
+
+/* === BOTÓN FLOTANTE IA (FAB) Y CHAT MODERNO === */
+.ai-fab {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 55%, #6366f1 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 28px rgba(14, 165, 233, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
+}
+.ai-fab:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 14px 34px rgba(14, 165, 233, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+body.cyberpunk-theme .ai-fab {
+  background: linear-gradient(135deg, #ff2a85 0%, #7b2cbf 50%, #00f5d4 100%);
+  box-shadow: 0 0 24px rgba(255, 42, 133, 0.55), 0 0 14px rgba(0, 245, 212, 0.35);
+}
+
+.ai-panel {
+  border-radius: 20px;
+  border: 1px solid var(--ef-surface-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.ai-header {
+  padding: 12px 14px;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.92) 0%, rgba(37, 99, 235, 0.95) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+body.cyberpunk-theme .ai-header {
+  background: linear-gradient(135deg, #ff2a85 0%, #3a0ca3 100%);
+}
+.ai-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.ai-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 8px #4ade80;
+  flex-shrink: 0;
+}
+.ai-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+.ai-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+.ai-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ai-msg {
+  border-radius: 14px;
+  line-height: 1.48;
+  font-size: 0.92rem;
+}
+.ai-msg.user {
+  border-bottom-right-radius: 4px;
+}
+.ai-msg.assistant {
+  border-bottom-left-radius: 4px;
+  border: 1px solid var(--ef-surface-border);
+}
+.ai-input-row {
+  padding: 10px 12px;
+  gap: 8px;
+  border-top: 1px solid var(--ef-surface-border);
+}
+.ai-input-row textarea {
+  border-radius: 18px;
+  padding: 9px 14px;
+}
+.ai-send,
+.ai-unified-voice-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ai-send {
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  color: #fff;
+  border: none;
 }

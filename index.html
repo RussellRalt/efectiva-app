@@ -192,20 +192,39 @@
     </div>
   </div>
 
-  <!-- CHAT IA FLOTANTE v2 -->
-  <button id="aiFab" class="ai-fab" title="Asistente IA">🤖</button>
+  <!-- CHAT IA FLOTANTE v3 (Diseño moderno) -->
+  <button id="aiFab" class="ai-fab" title="Asistente IA" aria-label="Abrir Asistente IA">
+    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 3l1.9 4.7L18.5 9.5l-4.6 1.8L12 16l-1.9-4.7L5.5 9.5l4.6-1.8L12 3z" fill="currentColor" fill-opacity="0.18"/>
+      <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/>
+      <path d="M5 17l.6 1.4L7 19l-1.4.6L5 21l-.6-1.4L3 19l1.4-.6L5 17z"/>
+    </svg>
+  </button>
   <div id="aiPanel" class="ai-panel" style="display: none;">
     <div class="ai-header">
-      <button id="aiSidebarToggle" class="ai-icon-btn" title="Mostrar / ocultar panel">☰</button>
-      <span id="aiChatTitle" class="ai-chat-title" title="Click para renombrar">Nuevo chat</span>
-      <button id="aiSettingsBtn" class="ai-icon-btn" title="Configurar API key de IA">⚙</button>
-      <button id="aiCloseBtn" class="ai-icon-btn" title="Cerrar">✕</button>
+      <button id="aiSidebarToggle" class="ai-icon-btn" title="Mostrar / ocultar panel" aria-label="Panel lateral">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="ai-header-brand">
+        <span class="ai-status-dot"></span>
+        <span id="aiChatTitle" class="ai-chat-title" title="Click para renombrar">Nuevo chat</span>
+      </div>
+      <button id="aiSettingsBtn" class="ai-icon-btn" title="Configurar API key de IA" aria-label="Configurar IA">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <button id="aiCloseBtn" class="ai-icon-btn" title="Cerrar" aria-label="Cerrar chat">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
     <div class="ai-body">
       <aside id="aiSidebar" class="ai-sidebar">
         <div class="ai-tabs">
-          <button class="ai-tab active" data-tab="history" title="Historial">💬</button>
-          <button class="ai-tab" data-tab="skills" title="Skills">📋</button>
+          <button class="ai-tab active" data-tab="history" title="Historial">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </button>
+          <button class="ai-tab" data-tab="skills" title="Skills">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </button>
         </div>
         <div class="ai-tab-content" data-tab="history">
           <button id="aiNewChatBtn" class="ai-new-btn" title="Nuevo chat">+ Nuevo chat</button>
@@ -221,7 +240,9 @@
         <div class="ai-input-row">
           <button id="aiUnifiedVoiceBtn" class="ai-unified-voice-btn" title="Activar/Desactivar Modo Hablado Manos Libres Continuo">🎙️</button>
           <textarea id="aiInput" rows="1" placeholder="Hablá o escribí un mensaje..." autocomplete="off"></textarea>
-          <button id="aiSendBtn" class="ai-send" title="Enviar mensaje">➤</button>
+          <button id="aiSendBtn" class="ai-send" title="Enviar mensaje" aria-label="Enviar">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
         </div>
       </main>
     </div>
