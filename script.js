@@ -620,7 +620,7 @@ function renderFolders() {
     exportBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       exportFolder(folder);
-      folderDropdownMenu.style.display = 'none';
+      closeAllFolderDropdowns();
     });
     folderDropdownMenu.appendChild(exportBtn);
 
@@ -633,7 +633,7 @@ function renderFolders() {
       playFolderBtn.className = 'play-folder-btn';
       playFolderBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        folderDropdownMenu.style.display = 'none';
+        closeAllFolderDropdowns();
         if (folder.isDefaultRewards) {
           if (typeof showConfirm === 'function') {
             showConfirm('La carpeta de Recompensas no se reproduce. Andá a una carpeta con tareas.', () => {});
@@ -651,7 +651,7 @@ function renderFolders() {
       renameBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         renameFolder(folder);
-        folderDropdownMenu.style.display = 'none';
+        closeAllFolderDropdowns();
       });
       folderDropdownMenu.appendChild(renameBtn);
 
@@ -661,7 +661,7 @@ function renderFolders() {
         e.stopPropagation();
         showConfirm(`¿Eliminar la carpeta "${folder.name}"?`, () => {
           moveFolderToTrash(folder.id);
-          folderDropdownMenu.style.display = 'none';
+          closeAllFolderDropdowns();
         });
       });
       folderDropdownMenu.appendChild(deleteBtn);
@@ -672,25 +672,36 @@ function renderFolders() {
   });
 }
 
-function toggleFolderDropdownMenu(folderId) {
-  document.querySelectorAll('.folder-dropdown-menu').forEach(menu => {
-    menu.style.display = 'none';
+function closeAllFolderDropdowns() {
+  document.querySelectorAll('.folder-dropdown-menu').forEach(m => {
+    m.style.display = 'none';
+    m.classList.remove('open-up');
   });
+  document.querySelectorAll('.folder.menu-open').forEach(f => f.classList.remove('menu-open'));
+}
 
+function toggleFolderDropdownMenu(folderId) {
   const menu = document.getElementById(`folderMenu-${folderId}`);
   if (!menu) return;
+  const wasOpen = menu.style.display === 'block';
+  closeAllFolderDropdowns();
 
-  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
-
-  if (menu.style.display === 'block') {
+  if (!wasOpen) {
+    const parentFolder = menu.closest('.folder');
+    if (parentFolder) parentFolder.classList.add('menu-open');
+    menu.style.display = 'block';
+    const rect = menu.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight - 16) {
+      menu.classList.add('open-up');
+    }
     setTimeout(() => {
       document.addEventListener('click', function clickListener(e) {
         if (!menu.contains(e.target) && !e.target.closest('.folder-options-btn')) {
-          menu.style.display = 'none';
+          closeAllFolderDropdowns();
           document.removeEventListener('click', clickListener);
         }
       });
-    }, 100);
+    }, 50);
   }
 }
 
@@ -1436,20 +1447,34 @@ function buildPendingTaskItem(folder, task) {
     menuBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       const menu = e.currentTarget.nextElementSibling;
-      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
-      setTimeout(() => {
-        document.addEventListener('click', function taskMenuClickListener(ev) {
-          if (!menu.contains(ev.target)) {
-            menu.style.display = 'none';
-            document.removeEventListener('click', taskMenuClickListener);
-          }
-        });
-      }, 100);
+      const wasOpen = menu.style.display === 'block';
+      document.querySelectorAll('.task-menu').forEach(m => { m.style.display = 'none'; m.classList.remove('open-up'); });
+      document.querySelectorAll('.task.menu-open').forEach(t => t.classList.remove('menu-open'));
+
+      if (!wasOpen) {
+        const parentTask = menu.closest('.task');
+        if (parentTask) parentTask.classList.add('menu-open');
+        menu.style.display = 'block';
+        const rect = menu.getBoundingClientRect();
+        if (rect.bottom > window.innerHeight - 16) {
+          menu.classList.add('open-up');
+        }
+        setTimeout(() => {
+          document.addEventListener('click', function taskMenuClickListener(ev) {
+            if (!menu.contains(ev.target)) {
+              menu.style.display = 'none';
+              menu.classList.remove('open-up');
+              if (parentTask) parentTask.classList.remove('menu-open');
+              document.removeEventListener('click', taskMenuClickListener);
+            }
+          });
+        }, 50);
+      }
     });
 
     const taskMenu = document.createElement('div');
     taskMenu.className = 'task-menu';
-    taskMenu.style.display = 'none';
+    taskMenu.style.display = 'none'; taskMenu.classList.remove('open-up'); taskDiv.classList.remove('menu-open');
 
     // v2.7.0: el botón "Editar" del menú desplegable fue eliminado
     // (la edición de nombre ahora se hace con doble click sobre el nombre).
@@ -1459,7 +1484,7 @@ function buildPendingTaskItem(folder, task) {
     moveMenuItem.addEventListener('click', (e) => {
       e.stopPropagation();
       inlineMoveTask(task, false);
-      taskMenu.style.display = 'none';
+      taskMenu.style.display = 'none'; taskMenu.classList.remove('open-up'); taskDiv.classList.remove('menu-open');
     });
 
     const scheduleMenuItem = document.createElement('button');
@@ -1467,7 +1492,7 @@ function buildPendingTaskItem(folder, task) {
     scheduleMenuItem.addEventListener('click', (e) => {
       e.stopPropagation();
       openScheduleModal(task);
-      taskMenu.style.display = 'none';
+      taskMenu.style.display = 'none'; taskMenu.classList.remove('open-up'); taskDiv.classList.remove('menu-open');
     });
 
     const deleteMenuItem = document.createElement('button');
@@ -1479,14 +1504,14 @@ function buildPendingTaskItem(folder, task) {
         saveDataToLocalStorage();
         renderTasks();
       });
-      taskMenu.style.display = 'none';
+      taskMenu.style.display = 'none'; taskMenu.classList.remove('open-up'); taskDiv.classList.remove('menu-open');
     });
 
     const saveTplMenuItem = document.createElement('button');
     saveTplMenuItem.textContent = '📌 Guardar plantilla';
     saveTplMenuItem.addEventListener('click', (e) => {
       e.stopPropagation();
-      taskMenu.style.display = 'none';
+      taskMenu.style.display = 'none'; taskMenu.classList.remove('open-up'); taskDiv.classList.remove('menu-open');
       saveTaskAsTemplate(task, task.name);
       saveTplMenuItem.textContent = '✅ ¡Guardada!';
       if (typeof asistaAlert === 'function') {
@@ -4153,5 +4178,217 @@ function releaseWakeLock() {
         tplPanel.style.display = 'none';
       });
     }
+  });
+})();
+
+
+/************************************************************************
+ * CENTRO DE CONTROL VISUAL (REGLAS, RETRASOS Y MEMORIA IA)
+ ************************************************************************/
+(function setupControlCenter() {
+  const btn = document.getElementById('controlCenterBtn');
+  const modal = document.getElementById('controlCenterModal');
+  const closeBtn = document.getElementById('closeControlCenterBtn');
+  const body = document.getElementById('controlCenterBody');
+  if (!btn || !modal || !body) return;
+
+  let activeTab = 'rules';
+
+  function renderControlCenter() {
+    body.innerHTML = '';
+    if (activeTab === 'rules') {
+      const rules = Array.isArray(automationRules) ? automationRules : [];
+      if (rules.length === 0) {
+        body.innerHTML = '<div class="cc-empty">No hay reglas de automatización aún.<br><small>Podés pedirle al asistente: "Cuando complete el paso 1 de X, creá la tarea Y" o "Cada día a las 08:00 iniciá mi rutina".</small></div>';
+        return;
+      }
+      rules.forEach(rule => {
+        const item = document.createElement('div');
+        item.className = 'cc-item' + (rule.activa === false ? ' inactive' : '');
+
+        const info = document.createElement('div');
+        info.className = 'cc-item-info';
+
+        const title = document.createElement('div');
+        title.className = 'cc-item-title';
+        const evLabels = {
+          paso_completado: 'Al completar paso',
+          tiempo_paso_agotado: 'Al agotarse tiempo',
+          hora_programada: 'Horario programado' + (rule.condicion?.hora ? ' (' + rule.condicion.hora + ')' : ''),
+          tarea_completada: 'Al completar tarea',
+          carpeta_completada: 'Al completar carpeta'
+        };
+        title.textContent = evLabels[rule.evento] || rule.evento;
+
+        const sub = document.createElement('div');
+        sub.className = 'cc-item-sub';
+        const accLabels = {
+          crear_tarea: 'Crear tarea',
+          mover_tarea: 'Mover tarea',
+          iniciar_presentacion_tarea: 'Iniciar presentación',
+          siguiente_paso: 'Siguiente paso',
+          aplicar_plantilla: 'Aplicar plantilla',
+          crear_recompensa: 'Crear recompensa',
+          asignar_prioridad: 'Cambiar prioridad',
+          asignar_color: 'Cambiar color'
+        };
+        const targetName = rule.parametros_accion?.nombre || '';
+        sub.textContent = (accLabels[rule.accion_automatica] || rule.accion_automatica) + (targetName ? ': ' + targetName : '');
+
+        info.append(title, sub);
+
+        const controls = document.createElement('div');
+        controls.className = 'cc-item-controls';
+
+        const labelSwitch = document.createElement('label');
+        labelSwitch.className = 'ef-switch';
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = rule.activa !== false;
+        chk.addEventListener('change', () => {
+          rule.activa = chk.checked;
+          saveAutomationRules();
+          renderControlCenter();
+        });
+        const slider = document.createElement('span');
+        slider.className = 'ef-slider';
+        labelSwitch.append(chk, slider);
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'cc-del-btn';
+        delBtn.textContent = '🗑';
+        delBtn.title = 'Eliminar regla';
+        delBtn.addEventListener('click', () => {
+          automationRules = automationRules.filter(r => r.id !== rule.id);
+          saveAutomationRules();
+          renderControlCenter();
+        });
+
+        controls.append(labelSwitch, delBtn);
+        item.append(info, controls);
+        body.appendChild(item);
+      });
+    } else if (activeTab === 'delays') {
+      const delays = [];
+      let finishedCount = 0;
+      let totalExtraMin = 0;
+      (folders || []).forEach(f => {
+        finishedCount += (f.finished || []).length;
+        [...(f.tasks || []), ...(f.finished || [])].forEach(t => {
+          if (Array.isArray(t.delayLogs)) {
+            t.delayLogs.forEach(d => {
+              totalExtraMin += Number(d.minutos_extra) || 0;
+              delays.push({ folderName: f.name, taskName: t.name, ...d });
+            });
+          }
+        });
+      });
+
+      const kpiRow = document.createElement('div');
+      kpiRow.className = 'cc-kpi-row';
+      kpiRow.innerHTML =
+        '<div class="cc-kpi"><span class="cc-kpi-val">' + finishedCount + '</span><span class="cc-kpi-lbl">Completadas</span></div>' +
+        '<div class="cc-kpi"><span class="cc-kpi-val">' + delays.length + '</span><span class="cc-kpi-lbl">Retrasos</span></div>' +
+        '<div class="cc-kpi"><span class="cc-kpi-val">+' + totalExtraMin + 'm</span><span class="cc-kpi-lbl">Tiempo extra</span></div>';
+      body.appendChild(kpiRow);
+
+      if (delays.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'cc-empty';
+        empty.textContent = 'Sin retrasos justificados todavía. Cuando entres en números rojos durante una presentación, tocá "📝 Justificar retraso".';
+        body.appendChild(empty);
+        return;
+      }
+
+      delays.slice().reverse().slice(0, 25).forEach(d => {
+        const item = document.createElement('div');
+        item.className = 'cc-item';
+        const info = document.createElement('div');
+        info.className = 'cc-item-info';
+
+        const title = document.createElement('div');
+        title.className = 'cc-item-title';
+        title.textContent = d.motivo;
+
+        const sub = document.createElement('div');
+        sub.className = 'cc-item-sub';
+        const ex = d.segundos_exceso ? (' · Exceso: ' + Math.round(d.segundos_exceso / 60 * 10) / 10 + ' min') : '';
+        const ext = d.minutos_extra ? (' · +' + d.minutos_extra + 'm añadidos') : '';
+        sub.textContent = d.taskName + ' (Paso ' + ((d.paso_indice || 0) + 1) + ')' + ex + ext;
+
+        info.append(title, sub);
+        item.appendChild(info);
+        body.appendChild(item);
+      });
+    } else if (activeTab === 'memory') {
+      let mems = [];
+      try {
+        const raw = localStorage.getItem('efectivaAgentMemoryV1');
+        mems = raw ? JSON.parse(raw) : [];
+      } catch (e) { mems = []; }
+
+      if (!Array.isArray(mems) || mems.length === 0) {
+        body.innerHTML = '<div class="cc-empty">Tu asistente aún no ha guardado recuerdos a largo plazo.<br><small>A medida que chatees o le cuentes tus horarios ideales y preferencias, los recordará aquí entre sesiones.</small></div>';
+        return;
+      }
+
+      mems.forEach(m => {
+        const item = document.createElement('div');
+        item.className = 'cc-item';
+
+        const info = document.createElement('div');
+        info.className = 'cc-item-info';
+
+        const badge = document.createElement('span');
+        badge.className = 'cc-mem-tag';
+        badge.textContent = m.categoria;
+
+        const title = document.createElement('div');
+        title.className = 'cc-item-title';
+        title.textContent = m.clave;
+
+        const sub = document.createElement('div');
+        sub.className = 'cc-item-sub';
+        sub.textContent = m.valor;
+
+        info.append(badge, title, sub);
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'cc-del-btn';
+        delBtn.textContent = '🗑';
+        delBtn.title = 'Olvidar recuerdo';
+        delBtn.addEventListener('click', () => {
+          const next = mems.filter(x => x.id !== m.id);
+          localStorage.setItem('efectivaAgentMemoryV1', JSON.stringify(next));
+          renderControlCenter();
+        });
+
+        item.append(info, delBtn);
+        body.appendChild(item);
+      });
+    }
+  }
+
+  btn.addEventListener('click', () => {
+    modal.style.display = 'flex';
+    renderControlCenter();
+  });
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+  }
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.style.display = 'none';
+  });
+
+  modal.querySelectorAll('.cc-seg-btn').forEach(tabBtn => {
+    tabBtn.addEventListener('click', () => {
+      modal.querySelectorAll('.cc-seg-btn').forEach(b => b.classList.remove('active'));
+      tabBtn.classList.add('active');
+      activeTab = tabBtn.dataset.ccTab || 'rules';
+      renderControlCenter();
+    });
   });
 })();
