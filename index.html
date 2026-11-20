@@ -130,7 +130,18 @@
       </div>
 
       <div class="presentation-bottom-bar">
-        <div class="timer" id="timerDisplay">00:00</div>
+        <div class="presentation-timer-row">
+          <div class="timer" id="timerDisplay">00:00</div>
+          <button id="justifyDelayBtn" class="justify-delay-btn" type="button" style="display: none;" title="Justificar retraso / añadir tiempo">📝 Justificar retraso</button>
+        </div>
+        <div id="delayJustifyBox" class="delay-justify-box" style="display: none;">
+          <input id="delayReasonInput" type="text" placeholder="¿Por qué te atrasaste? (ej: Fui por jabón)" maxlength="140" />
+          <div class="delay-justify-actions">
+            <input id="delayExtraMinInput" type="number" min="0" step="1" placeholder="+ min (opcional)" title="Sumar minutos al paso (opcional)" />
+            <button id="saveDelayBtn" type="button" class="delay-save-btn">Guardar</button>
+            <button id="cancelDelayBtn" type="button" class="delay-cancel-btn">Cancelar</button>
+          </div>
+        </div>
         <div class="presentation-swipe-hint" id="presentationSwipeHint">
           <span class="hint-arrow">↕</span> Desliza o toca para navegar
         </div>

@@ -1999,6 +1999,26 @@ function triggerAutomationEvent(eventType, payload) {
             }
           }
         }
+      } else if (rule.accion_automatica === 'iniciar_presentacion_tarea') {
+        const targetId = params.tarea_id || (payload.task && payload.task.id);
+        let foundTask = null;
+        let foundFolderId = payload.folderId;
+        for (const f of folders) {
+          const t = (f.tasks || []).find(x => x.id === targetId);
+          if (t) { foundTask = t; foundFolderId = f.id; break; }
+        }
+        if (foundTask && Array.isArray(foundTask.steps) && foundTask.steps.length > 0) {
+          if (typeof openFolder === 'function') openFolder(foundFolderId);
+          if (typeof startPresentation === 'function') startPresentation(foundTask);
+        }
+      } else if (rule.accion_automatica === 'siguiente_paso') {
+        if (presentationOpen && typeof nextStep === 'function') {
+          nextStep(true);
+        }
+      } else if (rule.accion_automatica === 'aplicar_plantilla' && params.plantilla_id) {
+        if (typeof applyUserTemplate === 'function') {
+          applyUserTemplate(params.plantilla_id, params.carpeta_destino_id || payload.folderId);
+        }
       }
     } catch(err) {
       console.warn('Error al ejecutar regla de automatización:', err);
@@ -2346,6 +2366,7 @@ function startPresentation(task, restoredState = null) {
   showPresentationStep('none');
   startTimer();
   addMinimizeButton();
+  setupDelayJustificationUI();
   saveActivePresentationState();
 
   // Limpiar y registrar listeners de interacción (click y swipe vertical)
@@ -2412,7 +2433,7 @@ function updatePresentationUI() {
  * Click / Tap: si se pulsa a la derecha avanza, a la izquierda retrocede.
  */
 function handlePresentationClick(e) {
-  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn')) || e.target.closest('#presentationAudioCoachBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn'))) return;
   if (isPresentationMinimized || isPresentationTransitioning) return;
 
   // Si acaba de ocurrir un swipe, descartar el clic sintético que emite el navegador móvil
@@ -2436,7 +2457,7 @@ function handlePresentationClick(e) {
  * Deslizar hacia abajo (Swipe Down) -> Regresa al paso anterior
  */
 function handleTouchStart(e) {
-  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
   if (isPresentationMinimized || isPresentationTransitioning) return;
 
   if (e.touches && e.touches[0]) {
@@ -2477,7 +2498,7 @@ function handleTouchMove(e) {
 }
 
 function handleTouchEnd(e) {
-  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
   if (isPresentationMinimized) return;
 
   if (isPresentationDragging) {
@@ -2533,7 +2554,7 @@ let mouseStartTime = 0;
 
 function handleMouseDown(e) {
   if (e.button !== 0) return;
-  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
   if (isPresentationMinimized || isPresentationTransitioning) return;
   mouseStartY = e.clientY;
   mouseStartX = e.clientX;
@@ -2874,7 +2895,7 @@ function showCongratulations() {
 
 function handleFinalClick(e) {
   // Si el click fue en el botón de minimizar, no hacer nada
-  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn'))) return;
+  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn'))) return;
 
   // Removemos el listener para evitar llamadas duplicadas
   presentationModal.removeEventListener('click', handleFinalClick);
@@ -2986,11 +3007,100 @@ function playStepAlarmChime() {
   } catch (e) {}
 }
 
+function logStepDelay(task, stepIndex, reason, extraMinutes = 0, overdueSeconds = 0) {
+  if (!task) return null;
+  if (!Array.isArray(task.delayLogs)) task.delayLogs = [];
+  const cleanReason = String(reason || '').trim() || 'Retraso sin especificar';
+  const extraMin = Math.max(0, Number(extraMinutes) || 0);
+  const entry = {
+    id: '_dly_' + Math.random().toString(36).substr(2, 8),
+    paso_indice: stepIndex,
+    paso_texto: (task.steps && task.steps[stepIndex]) ? (task.steps[stepIndex].text || task.steps[stepIndex]) : '',
+    motivo: cleanReason,
+    segundos_exceso: Math.max(0, Math.round(overdueSeconds)),
+    minutos_extra: extraMin,
+    fecha_iso: new Date().toISOString()
+  };
+  task.delayLogs.push(entry);
+
+  // Si el usuario indicó minutos extra, sumarlos al paso y replanificar en vivo
+  if (extraMin > 0 && task.totalTime) {
+    const extraSec = Math.round(extraMin * 60);
+    if (!Array.isArray(task.stepTimes)) task.stepTimes = task.steps.map(() => 0);
+    task.stepTimes[stepIndex] = (task.stepTimes[stepIndex] || 0) + extraSec;
+    task.totalTime += extraSec;
+    task.hasCustomStepTimes = true;
+    if (currentPresentationTask && currentPresentationTask.id === task.id && currentStepIndex === stepIndex) {
+      presentationBaseSeconds += extraSec;
+      syncPresentationClock();
+      if (currentStepCountdown > 0) {
+        presentationAlarmFired = false;
+        stopStepOvertimeAlarm();
+      }
+      saveActivePresentationState();
+    }
+  }
+  saveDataToLocalStorage();
+  return entry;
+}
+
+function setupDelayJustificationUI() {
+  const justifyBtn = document.getElementById('justifyDelayBtn');
+  const box = document.getElementById('delayJustifyBox');
+  const reasonInput = document.getElementById('delayReasonInput');
+  const extraInput = document.getElementById('delayExtraMinInput');
+  const saveBtn = document.getElementById('saveDelayBtn');
+  const cancelBtn = document.getElementById('cancelDelayBtn');
+  if (!justifyBtn || !box || justifyBtn._setupDone) return;
+  justifyBtn._setupDone = true;
+
+  justifyBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    box.style.display = box.style.display === 'none' ? 'flex' : 'none';
+    if (box.style.display === 'flex' && reasonInput) {
+      reasonInput.value = '';
+      if (extraInput) extraInput.value = '';
+      reasonInput.focus();
+    }
+  });
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      box.style.display = 'none';
+    });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!currentPresentationTask) return;
+      const reason = reasonInput ? reasonInput.value : '';
+      const extraMin = extraInput ? parseFloat(extraInput.value) : 0;
+      const overdueSec = (currentStepCountdown < 0) ? Math.abs(currentStepCountdown) : 0;
+      logStepDelay(currentPresentationTask, currentStepIndex, reason, isNaN(extraMin) ? 0 : extraMin, overdueSec);
+      box.style.display = 'none';
+      justifyBtn.textContent = '✅ Retraso guardado';
+      setTimeout(() => {
+        if (justifyBtn) justifyBtn.textContent = '📝 Justificar retraso';
+      }, 2000);
+    });
+  }
+}
+
 function triggerStepOvertimeAlarm() {
   if (presentationAlarmFired) return;
   presentationAlarmFired = true;
   stepAlarmActive = true;
   saveActivePresentationState();
+  if (currentPresentationTask) {
+    triggerAutomationEvent('tiempo_paso_agotado', {
+      folderId: currentFolderId,
+      task: currentPresentationTask,
+      stepIndex: currentStepIndex,
+      stepText: presentationSteps[currentStepIndex] || ''
+    });
+  }
 
   // Sonido inmediato y repetición suave cada 2.5s hasta silenciar o cambiar de paso
   playStepAlarmChime();
@@ -3066,14 +3176,24 @@ function syncPresentationClock() {
   if (currentPresentationTask.totalTime) {
     currentStepCountdown = presentationBaseSeconds - elapsed;
     timerDisplay.textContent = formatTime(currentStepCountdown);
-    timerDisplay.classList.toggle('timer-overdue', currentStepCountdown <= 0);
-    if (currentStepCountdown <= 0 && !presentationAlarmFired) {
+    const isOverdue = currentStepCountdown <= 0;
+    timerDisplay.classList.toggle('timer-overdue', isOverdue);
+    const jBtn = document.getElementById('justifyDelayBtn');
+    if (jBtn) {
+      jBtn.style.display = 'inline-flex';
+      jBtn.classList.toggle('urgent', isOverdue);
+    }
+    if (isOverdue && !presentationAlarmFired) {
       triggerStepOvertimeAlarm();
     }
   } else {
     timerSeconds = presentationBaseSeconds + elapsed;
     timerDisplay.textContent = formatTime(timerSeconds);
     timerDisplay.classList.remove('timer-overdue');
+  const _jBtn = document.getElementById('justifyDelayBtn'); if (_jBtn) _jBtn.style.display = 'none';
+  const _dBox = document.getElementById('delayJustifyBox'); if (_dBox) _dBox.style.display = 'none';
+    const jBtn = document.getElementById('justifyDelayBtn');
+    if (jBtn) jBtn.style.display = 'none';
   }
 }
 
@@ -3151,7 +3271,7 @@ function setupMinimizedDrag() {
 
   function onPipPointerDown(e) {
     // No iniciar drag si el pointerdown fue en el botón maximizar
-    if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn'))) return;
+    if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn'))) return;
     // Solo primary pointer (evita multi-touch accidental)
     if (e.pointerType === 'mouse' && e.button !== 0) return;
 
@@ -3660,7 +3780,29 @@ function toLocalDateTime(ts) {
 /************************************************************************
  * ALARMA
  ************************************************************************/
+function checkScheduledAutomationRules() {
+  if (!Array.isArray(automationRules) || automationRules.length === 0) return;
+  const now = new Date();
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const todayStr = now.toISOString().slice(0, 10);
+  const dayOfWeek = now.getDay(); // 0=Dom..6=Sab
+
+  let firedAny = false;
+  automationRules.forEach(rule => {
+    if (rule.evento !== 'hora_programada' || !rule.condicion || !rule.condicion.hora) return;
+    if (rule.condicion.hora !== hhmm) return;
+    if (Array.isArray(rule.condicion.dias) && rule.condicion.dias.length > 0 && !rule.condicion.dias.includes(dayOfWeek)) return;
+    if (rule._lastFiredDate === todayStr) return;
+
+    rule._lastFiredDate = todayStr;
+    firedAny = true;
+    triggerAutomationEvent('hora_programada', { folderId: rule.condicion.carpeta_id || currentFolderId });
+  });
+  if (firedAny) saveAutomationRules();
+}
+
 function checkAlarms() {
+  checkScheduledAutomationRules();
   if (alarmModal.style.display === 'flex') return;
   const now = Date.now();
   for (let folder of folders) {

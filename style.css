@@ -3035,3 +3035,101 @@ body.light-theme .user-template-card {
   font-size: 0.78rem;
   cursor: pointer;
 }
+
+
+/* === JUSTIFICACIÓN DE RETRASOS EN PRESENTACIÓN === */
+.presentation-timer-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.justify-delay-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(30, 41, 59, 0.75);
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.justify-delay-btn.urgent {
+  border-color: rgba(248, 113, 113, 0.75);
+  background: rgba(239, 68, 68, 0.25);
+  color: #fecaca;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.3);
+}
+body.light-theme .justify-delay-btn {
+  background: rgba(255, 255, 255, 0.9);
+  color: #1e293b;
+}
+body.light-theme .justify-delay-btn.urgent {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.delay-justify-box {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+body.light-theme .delay-justify-box {
+  background: #ffffff;
+  border-color: #fca5a5;
+}
+.delay-justify-box input {
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(30, 41, 59, 0.8);
+  color: #f8fafc;
+  font-size: 0.85rem;
+}
+body.light-theme .delay-justify-box input {
+  background: #f8fafc;
+  color: #0f172a;
+}
+.delay-justify-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.delay-justify-actions input {
+  flex: 1;
+  min-width: 0;
+}
+.delay-save-btn {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.delay-cancel-btn {
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.presentation-modal.minimized .justify-delay-btn,
+.presentation-modal.minimized .delay-justify-box {
+  display: none !important;
+}

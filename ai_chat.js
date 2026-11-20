@@ -92,6 +92,43 @@ IMPORTANTE:
     { type: 'function', function: { name: 'crear_tarea',
       description: 'Crea una tarea nueva. tiempo_minutos opcional (null = sin tiempo).',
       parameters: { type: 'object', properties: { carpeta_id: { type: 'string' }, nombre: { type: 'string' }, tiempo_minutos: { type: ['integer', 'null'] } }, required: ['carpeta_id', 'nombre'] } } },
+    { type: 'function', function: { name: 'guardar_tarea_completa',
+      description: 'Crea o actualiza de forma atómica una tarea completa en una sola llamada: nombre, pasos (con minutos y estado completado), tiempo total, prioridad, color, fecha_iso, etiquetas y posición.',
+      parameters: {
+        type: 'object',
+        properties: {
+          carpeta_id: { type: 'string' },
+          tarea_id: { type: ['string', 'null'], description: 'Si se envía, actualiza esta tarea existente en lugar de crear una nueva' },
+          nombre: { type: 'string' },
+          pasos: {
+            type: 'array',
+            items: {
+              type: ['string', 'object'],
+              properties: { descripcion: { type: 'string' }, minutos: { type: 'number' }, completado: { type: 'boolean' } }
+            },
+            description: 'Lista de pasos (strings u objetos {descripcion, minutos, completado})'
+          },
+          tiempo_minutos: { type: ['number', 'null'] },
+          prioridad: { type: ['string', 'null'], description: 'alta | media | baja | ninguna' },
+          color: { type: ['string', 'null'], description: 'Color hex #RRGGBB' },
+          fecha_iso: { type: ['string', 'null'], description: 'YYYY-MM-DD' },
+          etiquetas: { type: 'array', items: { type: 'string' } },
+          posicion: { type: ['integer', 'null'], description: 'Posición 0-based dentro de la carpeta' }
+        },
+        required: ['carpeta_id', 'nombre']
+      } } },
+    { type: 'function', function: { name: 'registrar_retraso_paso',
+      description: 'Justifica y registra un retraso (números rojos) en un paso de una tarea, con opción de sumar minutos extra al paso.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tarea_id: { type: 'string' },
+          paso_indice: { type: 'integer' },
+          motivo: { type: 'string' },
+          minutos_extra: { type: 'number', description: 'Minutos extra opcionales a sumar al paso' }
+        },
+        required: ['tarea_id', 'paso_indice', 'motivo']
+      } } },
     { type: 'function', function: { name: 'renombrar_tarea',
       description: 'Cambia el nombre de una tarea.',
       parameters: { type: 'object', properties: { tarea_id: { type: 'string' }, nuevo_nombre: { type: 'string' } }, required: ['tarea_id', 'nuevo_nombre'] } } },
@@ -216,14 +253,14 @@ IMPORTANTE:
       description: 'Registra el tiempo real invertido/consumido en minutos en una tarea.',
       parameters: { type: 'object', properties: { tarea_id: { type: 'string' }, minutos_reales: { type: 'integer' }, comentario: { type: ['string', 'null'] } }, required: ['tarea_id', 'minutos_reales'] } } },
     { type: 'function', function: { name: 'crear_regla_automatizacion',
-      description: 'Crea una regla automática (disparadores: paso_completado, tarea_completada, carpeta_completada -> crear_tarea, mover_tarea, crear_recompensa, asignar_prioridad o asignar_color).',
+      description: 'Crea una regla automática (disparadores: paso_completado, tiempo_paso_agotado, hora_programada, tarea_completada, carpeta_completada -> crear_tarea, mover_tarea, iniciar_presentacion_tarea, siguiente_paso, aplicar_plantilla, crear_recompensa, asignar_prioridad, asignar_color).',
       parameters: {
         type: 'object',
         properties: {
-          evento: { type: 'string', description: 'paso_completado | tarea_completada | carpeta_completada' },
-          condicion: { type: 'object', properties: { carpeta_id: { type: 'string' }, prioridad: { type: 'string' }, tarea_id: { type: 'string' }, paso_indice: { type: 'integer' }, paso_contiene: { type: 'string' } } },
-          accion_automatica: { type: 'string', description: 'crear_tarea | mover_tarea | crear_recompensa | asignar_prioridad | asignar_color' },
-          parametros_accion: { type: 'object', properties: { nombre: { type: 'string' }, tiempo_minutos: { type: 'number' }, pasos: { type: 'array', items: { type: 'string' } }, prioridad: { type: 'string' }, color: { type: 'string' }, carpeta_destino_id: { type: 'string' }, nueva_prioridad: { type: 'string' }, nuevo_color: { type: 'string' } } }
+          evento: { type: 'string', description: 'paso_completado | tiempo_paso_agotado | hora_programada | tarea_completada | carpeta_completada' },
+          condicion: { type: 'object', properties: { carpeta_id: { type: 'string' }, prioridad: { type: 'string' }, tarea_id: { type: 'string' }, paso_indice: { type: 'integer' }, paso_contiene: { type: 'string' }, hora: { type: 'string', description: 'HH:MM para hora_programada' }, dias: { type: 'array', items: { type: 'integer' }, description: 'Días 0=Dom..6=Sab' } } },
+          accion_automatica: { type: 'string', description: 'crear_tarea | mover_tarea | iniciar_presentacion_tarea | siguiente_paso | aplicar_plantilla | crear_recompensa | asignar_prioridad | asignar_color' },
+          parametros_accion: { type: 'object', properties: { nombre: { type: 'string' }, tiempo_minutos: { type: 'number' }, pasos: { type: 'array', items: { type: 'string' } }, prioridad: { type: 'string' }, color: { type: 'string' }, carpeta_destino_id: { type: 'string' }, tarea_id: { type: 'string' }, plantilla_id: { type: 'string' }, nueva_prioridad: { type: 'string' }, nuevo_color: { type: 'string' } } }
         },
         required: ['evento', 'accion_automatica']
       } } },
@@ -332,14 +369,17 @@ IMPORTANTE:
           tarea_id: currentPresentationTask.id,
           tarea_nombre: currentPresentationTask.name,
           paso_actual_indice: (typeof currentStepIndex !== 'undefined') ? currentStepIndex : 0,
+          paso_actual_texto: (typeof presentationSteps !== 'undefined' && presentationSteps[currentStepIndex]) ? (presentationSteps[currentStepIndex].text || presentationSteps[currentStepIndex]) : '',
           total_pasos: (typeof presentationSteps !== 'undefined') ? presentationSteps.length : 0,
-          tiempo_restante_segundos: currentPresentationTask.totalTime ? ((typeof currentStepCountdown !== 'undefined') ? currentStepCountdown : 0) : null,
+          segundos_restantes: currentPresentationTask.totalTime ? ((typeof currentStepCountdown !== 'undefined') ? currentStepCountdown : 0) : null,
           en_negativo: !!(currentPresentationTask.totalTime && typeof currentStepCountdown !== 'undefined' && currentStepCountdown < 0),
-          alarma_activa: (typeof stepAlarmActive !== 'undefined') ? !!stepAlarmActive : false
+          alarma_sonando: (typeof stepAlarmActive !== 'undefined') ? !!stepAlarmActive : false,
+          retrasos_registrados: Array.isArray(currentPresentationTask.delayLogs) ? currentPresentationTask.delayLogs : []
         }
       : null;
 
     return {
+      ahora_iso: new Date().toISOString(),
       carpeta_actual_id: (typeof currentFolderId !== 'undefined') ? currentFolderId : null,
       plantillas_usuario: (typeof userTemplates !== 'undefined') ? userTemplates.map(t => ({ id: t.id, nombre: t.name, pasos: (t.steps || []).length, tiempo_minutos: t.totalTime ? Math.round((t.totalTime / 60) * 10) / 10 : null, prioridad: t.priority || null })) : [],
       presentacion_activa: activePres,
@@ -347,13 +387,29 @@ IMPORTANTE:
         id: f.id, nombre: f.name, es_recompensas: !!f.isDefaultRewards,
         cantidad_tareas: (f.tasks || []).length,
         cantidad_completadas: (f.finished || []).length,
-        tareas: (f.tasks || []).map(t => ({
-          id: t.id, nombre: t.name, es_recompensa: !!t.isReward,
-          tiempo_minutos: t.totalTime ? Math.round((t.totalTime / 60) * 10) / 10 : (t.rewardTime || null),
-          tiempos_pasos_minutos: Array.isArray(t.stepTimes) ? t.stepTimes.map(s => Math.round(((Number(s) || 0) / 60) * 10) / 10) : [],
-          tiempos_personalizados: !!t.hasCustomStepTimes,
-          color: t.color || null, prioridad: t.priority || null, fecha_vencimiento: t.dueDate || null,
-          pasos: t.steps || []
+        tareas: (f.tasks || []).map(t => {
+          const curIdx = t.currentStepIndex || 0;
+          return {
+            id: t.id, nombre: t.name, es_recompensa: !!t.isReward,
+            tiempo_minutos: t.totalTime ? Math.round((t.totalTime / 60) * 10) / 10 : (t.rewardTime || null),
+            tiempos_pasos_minutos: Array.isArray(t.stepTimes) ? t.stepTimes.map(s => Math.round(((Number(s) || 0) / 60) * 10) / 10) : [],
+            tiempos_personalizados: !!t.hasCustomStepTimes,
+            color: t.color || null, prioridad: t.priority || null, fecha_vencimiento: t.dueDate || null,
+            etiquetas: Array.isArray(t.tags) ? t.tags : [],
+            pasos: t.steps || [],
+            pasos_detalle: (t.steps || []).map((s, idx) => ({
+              indice: idx,
+              texto: (typeof s === 'string') ? s : (s.text || ''),
+              completado: (typeof s === 'object' && s !== null && typeof s.completed === 'boolean') ? s.completed : (idx < curIdx),
+              minutos: (Array.isArray(t.stepTimes) && typeof t.stepTimes[idx] === 'number') ? Math.round((t.stepTimes[idx] / 60) * 10) / 10 : null
+            })),
+            retrasos: Array.isArray(t.delayLogs) ? t.delayLogs : []
+          };
+        }),
+        tareas_completadas: (f.finished || []).map(t => ({
+          id: t.id, nombre: t.name,
+          tiempo_minutos: t.totalTime ? Math.round((t.totalTime / 60) * 10) / 10 : null,
+          retrasos: Array.isArray(t.delayLogs) ? t.delayLogs : []
         }))
       })) : []
     };
@@ -443,6 +499,145 @@ IMPORTANTE:
         renderTasks();
       }
       return { ok: true, mensaje: `Tarea renombrada de "${antes}" a "${found.task.name}".` };
+    },
+
+    guardar_tarea_completa({ carpeta_id, tarea_id, nombre, pasos, tiempo_minutos, prioridad, color, fecha_iso, etiquetas, posicion }) {
+      const folder = findFolder(carpeta_id);
+      if (!folder) return { ok: false, error: 'Carpeta no encontrada' };
+      if (folder.isDefaultRewards) return { ok: false, error: 'No se pueden crear tareas normales en la carpeta de recompensas.' };
+      if (!nombre || !String(nombre).trim()) return { ok: false, error: 'Nombre de tarea vacío' };
+
+      let task = null;
+      let isUpdate = false;
+      if (tarea_id) {
+        const found = findTask(tarea_id);
+        if (!found) return { ok: false, error: 'Tarea a actualizar no encontrada' };
+        task = found.task;
+        isUpdate = true;
+      } else {
+        task = {
+          id: (typeof generateId === 'function') ? generateId() : ('_' + Math.random().toString(36).substr(2, 9)),
+          name: String(nombre).trim(),
+          steps: [],
+          isExpanded: false,
+          scheduledTimestamp: null,
+          isReward: false,
+          currentStepIndex: 0,
+          totalTime: null,
+          stepTimes: []
+        };
+      }
+
+      task.name = String(nombre).trim();
+
+      if (Array.isArray(pasos)) {
+        const parsedSteps = [];
+        const parsedTimes = [];
+        let hasAnyCustomMin = false;
+        let firstUncompleted = pasos.length;
+
+        pasos.forEach((p) => {
+          const text = (typeof p === 'string') ? p.trim() : String((p && (p.descripcion || p.texto || p.text)) || '').trim();
+          if (!text) return;
+          parsedSteps.push(text);
+          const mins = (typeof p === 'object' && p !== null && p.minutos !== undefined && p.minutos !== null) ? Number(p.minutos) : null;
+          if (mins !== null && !isNaN(mins) && mins >= 0) {
+            parsedTimes.push(Math.round(mins * 60));
+            hasAnyCustomMin = true;
+          } else {
+            parsedTimes.push(0);
+          }
+          const isDone = (typeof p === 'object' && p !== null) ? !!p.completado : false;
+          if (!isDone && firstUncompleted === pasos.length) {
+            firstUncompleted = parsedSteps.length - 1;
+          }
+        });
+
+        task.steps = parsedSteps;
+        if (hasAnyCustomMin) {
+          task.stepTimes = parsedTimes;
+          task.hasCustomStepTimes = true;
+          task.totalTime = (tiempo_minutos && Number(tiempo_minutos) > 0)
+            ? Math.round(Number(tiempo_minutos) * 60)
+            : parsedTimes.reduce((a, b) => a + b, 0);
+        } else if (tiempo_minutos && Number(tiempo_minutos) > 0) {
+          task.totalTime = Math.round(Number(tiempo_minutos) * 60);
+          if (typeof recalcStepTimes === 'function') recalcStepTimes(task, true);
+        } else if (tiempo_minutos === null) {
+          task.totalTime = null;
+          task.stepTimes = [];
+          task.hasCustomStepTimes = false;
+        }
+        if (firstUncompleted < parsedSteps.length) {
+          task.currentStepIndex = firstUncompleted;
+        }
+      } else if (tiempo_minutos !== undefined) {
+        task.totalTime = (tiempo_minutos && Number(tiempo_minutos) > 0) ? Math.round(Number(tiempo_minutos) * 60) : null;
+        if (typeof recalcStepTimes === 'function') recalcStepTimes(task, true);
+      }
+
+      if (prioridad !== undefined) {
+        const p = prioridad ? String(prioridad).toLowerCase() : null;
+        task.priority = (p === 'ninguna' || !p) ? null : p;
+      }
+      if (color !== undefined) {
+        if (!color) {
+          delete task.color;
+        } else {
+          const hex = String(color).trim();
+          if (/^#?[0-9A-Fa-f]{6}$/.test(hex)) {
+            task.color = (hex.startsWith('#') ? hex : '#' + hex).toUpperCase();
+          }
+        }
+      }
+      if (fecha_iso !== undefined) {
+        task.dueDate = fecha_iso ? String(fecha_iso) : null;
+      }
+      if (Array.isArray(etiquetas)) {
+        task.tags = etiquetas.map(x => String(x));
+      }
+
+      if (!isUpdate) {
+        if (posicion !== undefined && posicion !== null && !isNaN(Number(posicion))) {
+          const pos = Math.max(0, Math.min(folder.tasks.length, Number(posicion)));
+          folder.tasks.splice(pos, 0, task);
+        } else {
+          folder.tasks.push(task);
+        }
+      } else if (posicion !== undefined && posicion !== null && !isNaN(Number(posicion))) {
+        const curIdx = folder.tasks.findIndex(x => x.id === task.id);
+        if (curIdx !== -1) {
+          folder.tasks.splice(curIdx, 1);
+          const pos = Math.max(0, Math.min(folder.tasks.length, Number(posicion)));
+          folder.tasks.splice(pos, 0, task);
+        }
+      }
+
+      if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
+      if (typeof renderFolders === 'function') renderFolders();
+      if (typeof currentFolderId !== 'undefined' && currentFolderId === folder.id && typeof renderTasks === 'function') {
+        renderTasks();
+      }
+      return {
+        ok: true,
+        mensaje: `Tarea "${task.name}" ${isUpdate ? 'actualizada' : 'creada'} atómicamente con ${task.steps.length} pasos.`,
+        tarea_id: task.id
+      };
+    },
+
+    registrar_retraso_paso({ tarea_id, paso_indice, motivo, minutos_extra }) {
+      const found = findTask(tarea_id);
+      if (!found) return { ok: false, error: 'Tarea no encontrada' };
+      const idx = Number(paso_indice);
+      if (isNaN(idx) || idx < 0 || idx >= (found.task.steps || []).length) {
+        return { ok: false, error: `Índice de paso inválido: ${paso_indice}` };
+      }
+      if (typeof logStepDelay !== 'function') return { ok: false, error: 'logStepDelay no disponible' };
+      const overdue = (typeof currentPresentationTask !== 'undefined' && currentPresentationTask && currentPresentationTask.id === tarea_id && typeof currentStepCountdown !== 'undefined' && currentStepCountdown < 0)
+        ? Math.abs(currentStepCountdown)
+        : 0;
+      const entry = logStepDelay(found.task, idx, motivo, minutos_extra || 0, overdue);
+      return { ok: true, mensaje: `Retraso registrado en paso ${idx + 1}: "${entry.motivo}".`, registro: entry };
     },
 
     asignar_tiempo_tarea({ tarea_id, tiempo_minutos }) {
