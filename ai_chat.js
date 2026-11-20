@@ -2027,22 +2027,82 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
     return '\n\nESTADO ACTUAL EN TIEMPO REAL EN LA APP (' + folders.length + ' carpetas en total):\n' + (lista || '(Sin carpetas)') + memBlock;
   }
 
-  async function runAgent(userText, history) {
-    const messages = [
-      { role: 'system', content: SYSTEM_PROMPT + getResumenEstadoRapido() },
-      ...(history || []),
-      { role: 'user', content: userText }
-    ];
-    const toolTrace = [];
+  const PENDING_AI_JOB_KEY = 'efectivaPendingAiJobV1';
+  let isResumingPendingJob = false;
+
+  function savePendingAiJob(job) {
+    try {
+      if (!job) localStorage.removeItem(PENDING_AI_JOB_KEY);
+      else localStorage.setItem(PENDING_AI_JOB_KEY, JSON.stringify(job));
+    } catch (e) {}
+  }
+
+  function loadPendingAiJob() {
+    try {
+      const raw = localStorage.getItem(PENDING_AI_JOB_KEY);
+      if (!raw) return null;
+      const job = JSON.parse(raw);
+      // Expirar trabajos huérfanos de más de 30 minutos
+      if (!job || !job.chatId || (Date.now() - (job.updatedAt || 0) > 30 * 60 * 1000)) {
+        savePendingAiJob(null);
+        return null;
+      }
+      return job;
+    } catch (e) { return null; }
+  }
+
+  function isTransientNetworkError(err) {
+    const msg = String(err && err.message ? err.message : err || '').toLowerCase();
+    return msg.includes('failed to fetch') ||
+      msg.includes('networkerror') ||
+      msg.includes('load failed') ||
+      msg.includes('network') ||
+      msg.includes('abort') ||
+      !navigator.onLine;
+  }
+
+  async function runAgent(userText, history, resumeJob = null) {
+    const messages = (resumeJob && Array.isArray(resumeJob.messages) && resumeJob.messages.length > 0)
+      ? [{ role: 'system', content: SYSTEM_PROMPT + getResumenEstadoRapido() }, ...resumeJob.messages]
+      : [
+          { role: 'system', content: SYSTEM_PROMPT + getResumenEstadoRapido() },
+          ...(history || []),
+          { role: 'user', content: userText }
+        ];
+    const toolTrace = (resumeJob && Array.isArray(resumeJob.toolTrace)) ? [...resumeJob.toolTrace] : [];
+    const jobChatId = (resumeJob && resumeJob.chatId) ? resumeJob.chatId : currentChatId;
     let iterations = 0;
     let lastAssistantText = '';
-    // Sin límite artificial: continúa mientras el modelo solicite herramientas.
-    // Se detiene solo cuando el modelo entrega una respuesta final o la API devuelve un error real.
+
+    savePendingAiJob({
+      chatId: jobChatId,
+      userText,
+      messages: messages.slice(1),
+      toolTrace,
+      interrupted: false,
+      updatedAt: Date.now()
+    });
+
     while (true) {
       iterations++;
       let data;
       try { data = await callOpenRouter(messages); }
-      catch (err) { return { text: '❌ Error: ' + err.message, tools: toolTrace, history: messages }; }
+      catch (err) {
+        if (isTransientNetworkError(err)) {
+          // Si Android/Brave cortó el socket por llamada o cambio de app, guardar checkpoint para reanudar automáticamente al volver
+          savePendingAiJob({
+            chatId: jobChatId,
+            userText,
+            messages: messages.slice(1),
+            toolTrace,
+            interrupted: true,
+            updatedAt: Date.now()
+          });
+          return { interrupted: true, text: '', tools: toolTrace, history: messages };
+        }
+        savePendingAiJob(null);
+        return { text: '❌ Error: ' + err.message, tools: toolTrace, history: messages };
+      }
       if (!data.choices || !data.choices[0]) {
         return { text: '❌ Respuesta inválida del modelo.', tools: toolTrace, history: messages };
       }
@@ -2068,11 +2128,20 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
             content: JSON.stringify(result).slice(0, 80000)
           });
         }
+        savePendingAiJob({
+          chatId: jobChatId,
+          userText,
+          messages: messages.slice(1),
+          toolTrace,
+          interrupted: false,
+          updatedAt: Date.now()
+        });
         continue;
       }
       lastAssistantText = assistantMsg.content || '';
       break;
     }
+    savePendingAiJob(null);
     return { text: lastAssistantText, tools: toolTrace, history: trimHistory(messages) };
   }
 
@@ -2671,6 +2740,67 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       };
     }
 
+
+    async function finalizeAgentResult(chat, result) {
+      hideTyping();
+      if (result && result.interrupted) {
+        addToolMsg('⏸️ Conexión suspendida en segundo plano; se reanudará automáticamente al volver.');
+        return;
+      }
+      for (const t of (result.tools || [])) {
+        const r = t.result || {};
+        addToolMsg((((r && r.ok !== undefined) ? r.ok : !(r && r.error)) ? '✅' : '❌') + ' ' + t.tool + (r.mensaje ? ' → ' + r.mensaje : (r.error ? ' → ' + r.error : '')));
+      }
+      addAssistantMsg(result.text || '(sin respuesta)');
+      chat.messages.push({ role: 'assistant', content: result.text || '', tools: result.tools || [] });
+      chat.updatedAt = Date.now();
+      autoTitle(chat);
+      saveChats();
+      renderHistory();
+      renderChatTitle();
+      speakAssistantText(result.text || '');
+
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+          const preview = (result.text || 'Tarea completada').slice(0, 120);
+          if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+            navigator.serviceWorker.ready.then(reg => reg.showNotification('Efectiva IA terminó', { body: preview, icon: './icon-192.png', tag: 'efectiva-ai-done' })).catch(() => {});
+          } else {
+            new Notification('Efectiva IA terminó', { body: preview, icon: './icon-192.png' });
+          }
+        } catch (e) {}
+      }
+    }
+
+    async function resumePendingAiJobIfNeeded() {
+      if (isResumingPendingJob || document.hidden || !navigator.onLine) return;
+      const job = loadPendingAiJob();
+      if (!job) return;
+      if (!job.interrupted && (Date.now() - (job.updatedAt || 0) < 4000)) return;
+      const chat = chats.find(c => c.id === job.chatId) || getCurrentChat();
+      if (!chat) { savePendingAiJob(null); return; }
+
+      isResumingPendingJob = true;
+      try {
+        currentChatId = chat.id;
+        saveCurrentId();
+        addToolMsg('🔄 Reanudando petición tras volver a la app...');
+        showTyping();
+        const result = await runAgent(job.userText, [], job);
+        await finalizeAgentResult(chat, result);
+      } catch (e) {
+        hideTyping();
+      } finally {
+        isResumingPendingJob = false;
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) resumePendingAiJobIfNeeded();
+    });
+    window.addEventListener('online', () => resumePendingAiJobIfNeeded());
+    setTimeout(resumePendingAiJobIfNeeded, 1200);
+
     // ---------- SEND ----------
     let isProcessing = false;
     async function send() {
@@ -2685,27 +2815,17 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       if (!chat) { chat = newChat(); renderHistory(); }
       chat.messages.push({ role: 'user', content: text });
       chat.updatedAt = Date.now();
+      autoTitle(chat);
+      saveChats();
+      renderHistory();
       showTyping();
       try {
         const history = chat.messages
+          .slice(0, -1)
           .filter(m => m.role === 'user' || m.role === 'assistant')
           .map(m => ({ role: m.role, content: m.content || '' }));
         const result = await runAgent(text, history);
-        hideTyping();
-        for (const t of result.tools) {
-          const r = t.result || {};
-          addToolMsg((((r && r.ok !== undefined) ? r.ok : !(r && r.error)) ? '✅' : '❌') + ' ' + t.tool + (r.mensaje ? ' → ' + r.mensaje : (r.error ? ' → ' + r.error : '')));
-        }
-        addAssistantMsg(result.text || '(sin respuesta)');
-        chat.messages.push({ role: 'assistant', content: result.text || '', tools: result.tools });
-        chat.updatedAt = Date.now();
-        autoTitle(chat);
-        saveChats();
-        renderHistory();
-        renderChatTitle();
-
-        // Hablar respuesta si la voz está activada
-        speakAssistantText(result.text || '');
+        await finalizeAgentResult(chat, result);
       } catch (err) {
         hideTyping();
         addErrorMsg('Error: ' + (err && err.message ? err.message : String(err)));
