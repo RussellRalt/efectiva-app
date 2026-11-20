@@ -426,6 +426,7 @@ IMPORTANTE:
     const allRules = (typeof automationRules !== 'undefined' && Array.isArray(automationRules)) ? automationRules : [];
 
     return {
+      ok: true,
       ahora_iso: nowObj.toISOString(),
       ahora_local: ahoraLocal,
       zona_horaria: `${zonaHoraria} (${offsetStr})`,
@@ -1174,8 +1175,9 @@ IMPORTANTE:
     },
 
     obtener_papelera() {
-      if (typeof trash === 'undefined' || !Array.isArray(trash)) return { cantidad: 0, elementos: [] };
+      if (typeof trash === 'undefined' || !Array.isArray(trash)) return { ok: true, cantidad: 0, elementos: [] };
       return {
+        ok: true,
         cantidad: trash.length,
         elementos: trash.map(t => ({
           id: t.id,
@@ -2079,7 +2081,7 @@ IMPORTANTE:
           if (m.tools && m.tools.length > 0) {
             m.tools.forEach(t => {
               const r = t.result || {};
-              addToolMsg((r.ok ? '✅' : '❌') + ' ' + t.tool + (r.mensaje ? ' → ' + r.mensaje : (r.error ? ' → ' + r.error : '')));
+              addToolMsg((((r && r.ok !== undefined) ? r.ok : !(r && r.error)) ? '✅' : '❌') + ' ' + t.tool + (r.mensaje ? ' → ' + r.mensaje : (r.error ? ' → ' + r.error : '')));
             });
           }
           if (m.content) addAssistantMsg(m.content);
@@ -2404,7 +2406,7 @@ IMPORTANTE:
         hideTyping();
         for (const t of result.tools) {
           const r = t.result || {};
-          addToolMsg((r.ok ? '✅' : '❌') + ' ' + t.tool + (r.mensaje ? ' → ' + r.mensaje : (r.error ? ' → ' + r.error : '')));
+          addToolMsg((((r && r.ok !== undefined) ? r.ok : !(r && r.error)) ? '✅' : '❌') + ' ' + t.tool + (r.mensaje ? ' → ' + r.mensaje : (r.error ? ' → ' + r.error : '')));
         }
         addAssistantMsg(result.text || '(sin respuesta)');
         chat.messages.push({ role: 'assistant', content: result.text || '', tools: result.tools });
