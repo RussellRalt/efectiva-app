@@ -3,7 +3,14 @@
   "appName": "Efectiva",
   "webDir": "www",
   "server": {
-    "androidScheme": "https"
+    "url": "https://russellralt.github.io/efectiva-app/",
+    "androidScheme": "https",
+    "allowNavigation": [
+      "russellralt.github.io",
+      "*.supabase.co",
+      "openrouter.ai",
+      "accounts.google.com"
+    ]
   },
   "plugins": {
     "LocalNotifications": {
