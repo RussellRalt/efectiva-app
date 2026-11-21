@@ -1811,7 +1811,34 @@ function hideGlobalSpeechBar() {
 let speechSessionId = 0;
 let cachedNativeTtsLang = null;
 
-function getNativeTTSPlugin() {
+function showVoiceNotice(msg) {
+  if (!msg) return;
+  try {
+    let el = document.getElementById('efectivaVoiceNotice');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'efectivaVoiceNotice';
+      el.style.cssText = 'position:fixed;bottom:84px;left:50%;transform:translateX(-50%);z-index:10099;background:rgba(15,23,42,0.95);color:#f8fafc;border:1px solid rgba(56,189,248,0.5);padding:9px 14px;border-radius:12px;font-size:0.82rem;max-width:88vw;text-align:center;box-shadow:0 10px 28px rgba(0,0,0,0.45);pointer-events:none;';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.display = 'block';
+    clearTimeout(el._hideTimer);
+    el._hideTimer = setTimeout(() => { el.style.display = 'none'; }, 4200);
+  } catch (_) {}
+}
+
+function getCustomNativeTTSPlugin() {
+  try {
+    const isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+    const plugin = window.Capacitor?.Plugins?.EfectivaTts;
+    return (isNative && plugin && typeof plugin.speak === 'function') ? plugin : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function getCommunityNativeTTSPlugin() {
   try {
     const isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
     const plugin = window.Capacitor?.Plugins?.TextToSpeech;
@@ -1821,34 +1848,46 @@ function getNativeTTSPlugin() {
   }
 }
 
+function getNativeTTSPlugin() {
+  return getCustomNativeTTSPlugin() || getCommunityNativeTTSPlugin();
+}
+
 async function resolveNativeSpanishLang(tts) {
   if (cachedNativeTtsLang) return cachedNativeTtsLang;
   try {
     if (typeof tts.getSupportedLanguages === 'function') {
       const res = await tts.getSupportedLanguages();
       const langs = Array.isArray(res?.languages) ? res.languages : [];
-      const prefs = ['es-MX', 'es-419', 'es-US', 'es-ES', 'es-AR', 'es-CO', 'es-GT'];
-      for (const p of prefs) {
-        const hit = langs.find(l => String(l).toLowerCase() === p.toLowerCase());
-        if (hit) { cachedNativeTtsLang = hit; return hit; }
+      if (langs.length > 0) {
+        const prefs = ['es-GT', 'es-MX', 'es-419', 'es-US', 'es-ES', 'es-AR', 'es-CO'];
+        for (const p of prefs) {
+          const hit = langs.find(l => String(l).toLowerCase() === p.toLowerCase());
+          if (hit) { cachedNativeTtsLang = hit; return hit; }
+        }
+        const anyEs = langs.find(l => String(l).toLowerCase().startsWith('es'));
+        if (anyEs) { cachedNativeTtsLang = anyEs; return anyEs; }
+        cachedNativeTtsLang = langs[0];
+        return langs[0];
       }
-      const anyEs = langs.find(l => String(l).toLowerCase().startsWith('es'));
-      if (anyEs) { cachedNativeTtsLang = anyEs; return anyEs; }
     }
   } catch (_) {}
-  cachedNativeTtsLang = 'es-ES';
-  return cachedNativeTtsLang;
+  return 'es-ES';
 }
 
-function stopAllSpeechSynthesis() {
+function stopAllSpeechSynthesis(skipNativeStop = false) {
   speechSessionId++;
-  const nativeTts = getNativeTTSPlugin();
-  if (nativeTts && typeof nativeTts.stop === 'function') {
-    try { nativeTts.stop().catch(() => {}); } catch (_) {}
+  if (!skipNativeStop) {
+    const customTts = getCustomNativeTTSPlugin();
+    if (customTts && typeof customTts.stop === 'function') {
+      try { customTts.stop().catch(() => {}); } catch (_) {}
+    }
+    const commTts = getCommunityNativeTTSPlugin();
+    if (commTts && typeof commTts.stop === 'function') {
+      try { commTts.stop().catch(() => {}); } catch (_) {}
+    }
   }
   if ('speechSynthesis' in window) {
     try {
-      // Nota: no llamar pause() antes de cancel() porque bloquea motores Chromium
       window.speechSynthesis.cancel();
     } catch (e) {}
   }
@@ -1856,49 +1895,44 @@ function stopAllSpeechSynthesis() {
 }
 window.stopAllSpeechSynthesis = stopAllSpeechSynthesis;
 
-// Motor unificado de voz (Capacitor Native TTS en APK Android + Web Speech API en navegador)
+// Motor unificado de voz (v30: Plugin nativo propio EfectivaTts -> TextToSpeech -> Web Speech API)
 window.EfectivaTTS = {
   isNativeAvailable() {
     return !!getNativeTTSPlugin();
   },
-  stop: stopAllSpeechSynthesis,
+  stop: () => stopAllSpeechSynthesis(false),
   async speakChunks(chunks, opts = {}) {
     if (!Array.isArray(chunks) || chunks.length === 0) return;
     const rate = opts.rate || 1.0;
     const onStart = opts.onStart;
     const onEnd = opts.onEnd;
     const guard = opts.guard || (() => true);
+    const verbose = !!opts.verbose;
 
-    stopAllSpeechSynthesis();
-    const mySession = speechSessionId;
-    const nativeTts = getNativeTTSPlugin();
-
-    if (nativeTts) {
-      const lang = await resolveNativeSpanishLang(nativeTts);
-      if (mySession !== speechSessionId || !guard()) {
-        hideGlobalSpeechBar();
-        return;
-      }
-      showGlobalSpeechBar();
-      if (typeof onStart === 'function') onStart();
+    // 1) Prioridad máxima: Plugin nativo propio EfectivaTts (cero race conditions, AUDIO STREAM_MUSIC, sin rechazos por dialecto)
+    const customTts = getCustomNativeTTSPlugin();
+    if (customTts) {
+      // No disparar stop() asíncrono en paralelo: EfectivaTts.speak() detiene sincrónicamente en el mismo hilo
+      stopAllSpeechSynthesis(true);
+      const mySession = speechSessionId;
       try {
-        for (const chunk of chunks) {
-          if (mySession !== speechSessionId || !guard()) break;
-          try {
-            await nativeTts.speak({
-              text: chunk,
-              lang,
-              rate,
-              pitch: 1.0,
-              volume: 1.0,
-              category: 'playback'
-            });
-          } catch (_) {
-            // Reintentar con idioma por defecto del sistema si el tag BCP-47 falló
-            if (mySession !== speechSessionId || !guard()) break;
-            await nativeTts.speak({ text: chunk, rate, pitch: 1.0, volume: 1.0, category: 'playback' }).catch(() => {});
+        if (typeof customTts.getStatus === 'function') {
+          const st = await customTts.getStatus().catch(() => null);
+          if (st && typeof st.mediaVolume === 'number' && st.mediaVolume === 0) {
+            showVoiceNotice('🔇 Subí el volumen multimedia del teléfono para escuchar la voz');
           }
         }
+        if (mySession !== speechSessionId || !guard()) return;
+        showGlobalSpeechBar();
+        if (typeof onStart === 'function') onStart();
+        for (const chunk of chunks) {
+          if (mySession !== speechSessionId || !guard()) break;
+          await customTts.speak({ text: chunk, rate, pitch: 1.0, volume: 1.0 });
+        }
+      } catch (err) {
+        const msg = err && err.message ? err.message : String(err || 'Error de voz');
+        console.warn('[EfectivaTTS nativo]:', msg);
+        if (verbose) showVoiceNotice('⚠️ Voz Android: ' + msg);
       } finally {
         if (mySession === speechSessionId) {
           hideGlobalSpeechBar();
@@ -1908,7 +1942,45 @@ window.EfectivaTTS = {
       return;
     }
 
+    // 2) Respaldo: Plugin comunitario TextToSpeech (esperando stop() antes de speak() para evitar carrera)
+    const commTts = getCommunityNativeTTSPlugin();
+    if (commTts) {
+      stopAllSpeechSynthesis(true);
+      const mySession = speechSessionId;
+      try {
+        if (typeof commTts.stop === 'function') {
+          await commTts.stop().catch(() => {});
+        }
+        const lang = await resolveNativeSpanishLang(commTts);
+        if (mySession !== speechSessionId || !guard()) return;
+        showGlobalSpeechBar();
+        if (typeof onStart === 'function') onStart();
+        for (const chunk of chunks) {
+          if (mySession !== speechSessionId || !guard()) break;
+          await commTts.speak({ text: chunk, lang, rate, pitch: 1.0, volume: 1.0, category: 'playback' });
+        }
+      } catch (err) {
+        const msg = err && err.message ? err.message : String(err || 'Error TTS');
+        console.warn('[TextToSpeech]:', msg);
+        if (verbose) showVoiceNotice('⚠️ Voz APK: ' + msg);
+      } finally {
+        if (mySession === speechSessionId) {
+          hideGlobalSpeechBar();
+          if (typeof onEnd === 'function') onEnd();
+        }
+      }
+      return;
+    }
+
+    // 3) Navegador web / PWA: Web Speech API
+    stopAllSpeechSynthesis(true);
+    const mySession = speechSessionId;
+    const isNativeWithoutPlugin = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+    if (isNativeWithoutPlugin && verbose) {
+      showVoiceNotice('⚠️ Actualizá el APK a v30 para activar la voz nativa de Android');
+    }
     if (!('speechSynthesis' in window)) {
+      if (verbose) showVoiceNotice('⚠️ Este visor no soporta síntesis de voz web');
       if (typeof onEnd === 'function') onEnd();
       return;
     }
@@ -3129,6 +3201,7 @@ function speakPresentationStep(stepText, forceReplay = false) {
     window.EfectivaTTS.speakChunks(chunks, {
       rate: 1.0,
       lang: 'es-AR',
+      verbose: !!forceReplay,
       guard: () => presentationOpen
     });
   } catch (e) {}
