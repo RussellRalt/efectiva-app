@@ -2723,12 +2723,35 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
     }
 
     function speakAssistantText(text) {
-      if (!isVoiceModeActive || !('speechSynthesis' in window)) return;
+      if (!isVoiceModeActive) return;
       try {
-        window.speechSynthesis.cancel();
-        const clean = (text || '').replace(/[*_#`~>]/g, '').replace(/[\u{1F600}-\u{1F64F}]/gu, '');
-        if (!clean.trim()) return;
+        const clean = (text || '').replace(/[*_#`~>]/g, '').replace(/[\u{1F600}-\u{1F64F}]/gu, '').trim();
+        if (!clean) return;
 
+        if (window.EfectivaTTS && typeof window.EfectivaTTS.speakChunks === 'function') {
+          const maxLen = window.EfectivaTTS.isNativeAvailable() ? 320 : 190;
+          const chunks = (typeof splitTextForSpeech === 'function') ? splitTextForSpeech(clean, maxLen) : [clean];
+          const bestVoice = getBestSpanishVoice();
+          window.EfectivaTTS.speakChunks(chunks, {
+            rate: 1.05,
+            lang: bestVoice ? bestVoice.lang : 'es-AR',
+            voice: bestVoice || null,
+            guard: () => isVoiceModeActive,
+            onStart: () => updateUnifiedVoiceBtnState(),
+            onEnd: () => {
+              updateUnifiedVoiceBtnState();
+              if (isVoiceModeActive && recognition && !isListening && !isProcessing) {
+                setTimeout(() => {
+                  try { recognition.start(); } catch(e){}
+                }, 300);
+              }
+            }
+          });
+          return;
+        }
+
+        if (!('speechSynthesis' in window)) return;
+        window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(clean);
         const bestVoice = getBestSpanishVoice();
         if (bestVoice) {
@@ -2738,11 +2761,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
           u.lang = 'es-AR';
         }
         u.rate = 1.05;
-
-        u.onstart = () => {
-          updateUnifiedVoiceBtnState();
-        };
-
+        u.onstart = () => updateUnifiedVoiceBtnState();
         u.onend = u.onerror = () => {
           updateUnifiedVoiceBtnState();
           if (isVoiceModeActive && recognition && !isListening && !isProcessing) {
@@ -2751,13 +2770,14 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
             }, 300);
           }
         };
-
         window.speechSynthesis.speak(u);
       } catch(e) {}
     }
 
     function stopAssistantSpeech() {
-      if ('speechSynthesis' in window) {
+      if (window.EfectivaTTS && typeof window.EfectivaTTS.stop === 'function') {
+        window.EfectivaTTS.stop();
+      } else if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
       updateUnifiedVoiceBtnState();

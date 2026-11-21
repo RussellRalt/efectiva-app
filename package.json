@@ -8,11 +8,12 @@
     "cap:sync": "npm run prepare:www && npx cap sync android"
   },
   "dependencies": {
+    "@capacitor-community/text-to-speech": "^4.1.1",
     "@capacitor/android": "^6.1.2",
-    "@capacitor/core": "^6.1.2",
-    "@capacitor/local-notifications": "^6.1.2",
     "@capacitor/app": "^6.0.2",
-    "@capacitor/browser": "^6.0.3"
+    "@capacitor/browser": "^6.0.3",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/local-notifications": "^6.1.2"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2"

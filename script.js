@@ -1809,29 +1809,157 @@ function hideGlobalSpeechBar() {
 }
 
 let speechSessionId = 0;
+let cachedNativeTtsLang = null;
+
+function getNativeTTSPlugin() {
+  try {
+    const isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+    const plugin = window.Capacitor?.Plugins?.TextToSpeech;
+    return (isNative && plugin && typeof plugin.speak === 'function') ? plugin : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function resolveNativeSpanishLang(tts) {
+  if (cachedNativeTtsLang) return cachedNativeTtsLang;
+  try {
+    if (typeof tts.getSupportedLanguages === 'function') {
+      const res = await tts.getSupportedLanguages();
+      const langs = Array.isArray(res?.languages) ? res.languages : [];
+      const prefs = ['es-MX', 'es-419', 'es-US', 'es-ES', 'es-AR', 'es-CO', 'es-GT'];
+      for (const p of prefs) {
+        const hit = langs.find(l => String(l).toLowerCase() === p.toLowerCase());
+        if (hit) { cachedNativeTtsLang = hit; return hit; }
+      }
+      const anyEs = langs.find(l => String(l).toLowerCase().startsWith('es'));
+      if (anyEs) { cachedNativeTtsLang = anyEs; return anyEs; }
+    }
+  } catch (_) {}
+  cachedNativeTtsLang = 'es-ES';
+  return cachedNativeTtsLang;
+}
+
 function stopAllSpeechSynthesis() {
   speechSessionId++;
-  if (!('speechSynthesis' in window)) return;
-  try {
-    window.speechSynthesis.pause();
-    window.speechSynthesis.cancel();
-  } catch (e) {}
+  const nativeTts = getNativeTTSPlugin();
+  if (nativeTts && typeof nativeTts.stop === 'function') {
+    try { nativeTts.stop().catch(() => {}); } catch (_) {}
+  }
+  if ('speechSynthesis' in window) {
+    try {
+      // Nota: no llamar pause() antes de cancel() porque bloquea motores Chromium
+      window.speechSynthesis.cancel();
+    } catch (e) {}
+  }
   hideGlobalSpeechBar();
 }
 window.stopAllSpeechSynthesis = stopAllSpeechSynthesis;
 
-function speakAudioCoach(text) {
-  if (!audioCoachConfig.habilitado || !('speechSynthesis' in window)) return;
-  try {
+// Motor unificado de voz (Capacitor Native TTS en APK Android + Web Speech API en navegador)
+window.EfectivaTTS = {
+  isNativeAvailable() {
+    return !!getNativeTTSPlugin();
+  },
+  stop: stopAllSpeechSynthesis,
+  async speakChunks(chunks, opts = {}) {
+    if (!Array.isArray(chunks) || chunks.length === 0) return;
+    const rate = opts.rate || 1.0;
+    const onStart = opts.onStart;
+    const onEnd = opts.onEnd;
+    const guard = opts.guard || (() => true);
+
     stopAllSpeechSynthesis();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'es-AR';
-    u.rate = 1.0;
-    u.onstart = () => showGlobalSpeechBar();
-    u.onend = () => hideGlobalSpeechBar();
-    u.onerror = () => hideGlobalSpeechBar();
-    window.speechSynthesis.speak(u);
-  } catch(e) {}
+    const mySession = speechSessionId;
+    const nativeTts = getNativeTTSPlugin();
+
+    if (nativeTts) {
+      const lang = await resolveNativeSpanishLang(nativeTts);
+      if (mySession !== speechSessionId || !guard()) {
+        hideGlobalSpeechBar();
+        return;
+      }
+      showGlobalSpeechBar();
+      if (typeof onStart === 'function') onStart();
+      try {
+        for (const chunk of chunks) {
+          if (mySession !== speechSessionId || !guard()) break;
+          try {
+            await nativeTts.speak({
+              text: chunk,
+              lang,
+              rate,
+              pitch: 1.0,
+              volume: 1.0,
+              category: 'playback'
+            });
+          } catch (_) {
+            // Reintentar con idioma por defecto del sistema si el tag BCP-47 falló
+            if (mySession !== speechSessionId || !guard()) break;
+            await nativeTts.speak({ text: chunk, rate, pitch: 1.0, volume: 1.0, category: 'playback' }).catch(() => {});
+          }
+        }
+      } finally {
+        if (mySession === speechSessionId) {
+          hideGlobalSpeechBar();
+          if (typeof onEnd === 'function') onEnd();
+        }
+      }
+      return;
+    }
+
+    if (!('speechSynthesis' in window)) {
+      if (typeof onEnd === 'function') onEnd();
+      return;
+    }
+    try {
+      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+    } catch (_) {}
+
+    let idx = 0;
+    function speakNextWebChunk() {
+      if (mySession !== speechSessionId || !guard()) {
+        hideGlobalSpeechBar();
+        return;
+      }
+      if (idx >= chunks.length) {
+        hideGlobalSpeechBar();
+        if (typeof onEnd === 'function') onEnd();
+        return;
+      }
+      const u = new SpeechSynthesisUtterance(chunks[idx]);
+      u.lang = opts.lang || 'es-AR';
+      u.rate = rate;
+      if (opts.voice) u.voice = opts.voice;
+      u.onstart = () => {
+        if (mySession === speechSessionId && guard()) {
+          showGlobalSpeechBar();
+          if (idx === 0 && typeof onStart === 'function') onStart();
+        } else {
+          stopAllSpeechSynthesis();
+        }
+      };
+      u.onend = () => {
+        idx++;
+        speakNextWebChunk();
+      };
+      u.onerror = () => {
+        if (mySession === speechSessionId) {
+          hideGlobalSpeechBar();
+          if (typeof onEnd === 'function') onEnd();
+        }
+      };
+      window.speechSynthesis.speak(u);
+    }
+    speakNextWebChunk();
+  }
+};
+
+function speakAudioCoach(text) {
+  if (!audioCoachConfig.habilitado) return;
+  const chunks = (typeof splitTextForSpeech === 'function') ? splitTextForSpeech(text, 240) : [String(text || '')];
+  if (chunks.length === 0) return;
+  window.EfectivaTTS.speakChunks(chunks, { rate: 1.0, lang: 'es-AR' });
 }
 
 let automationRules = [];
@@ -2993,41 +3121,17 @@ function splitTextForSpeech(text, maxLen = 190) {
 }
 
 function speakPresentationStep(stepText, forceReplay = false) {
-  if (!presentationOpen || (!presentationAudioCoachEnabled && !forceReplay) || !('speechSynthesis' in window)) return;
+  if (!presentationOpen || (!presentationAudioCoachEnabled && !forceReplay)) return;
   try {
-    stopAllSpeechSynthesis();
-    const mySession = speechSessionId;
-    const chunks = splitTextForSpeech(`Paso ${currentStepIndex + 1}: ${stepText || ''}`, 190);
+    const maxLen = window.EfectivaTTS?.isNativeAvailable() ? 320 : 190;
+    const chunks = splitTextForSpeech(`Paso ${currentStepIndex + 1}: ${stepText || ''}`, maxLen);
     if (chunks.length === 0) return;
-
-    let idx = 0;
-    function speakNextChunk() {
-      if (mySession !== speechSessionId || !presentationOpen) {
-        hideGlobalSpeechBar();
-        return;
-      }
-      if (idx >= chunks.length) {
-        hideGlobalSpeechBar();
-        return;
-      }
-      const u = new SpeechSynthesisUtterance(chunks[idx]);
-      u.lang = 'es-AR';
-      u.rate = 1.0;
-      u.onstart = () => {
-        if (mySession === speechSessionId && presentationOpen) showGlobalSpeechBar();
-        else stopAllSpeechSynthesis();
-      };
-      u.onend = () => {
-        idx++;
-        speakNextChunk();
-      };
-      u.onerror = () => {
-        hideGlobalSpeechBar();
-      };
-      window.speechSynthesis.speak(u);
-    }
-    speakNextChunk();
-  } catch(e) {}
+    window.EfectivaTTS.speakChunks(chunks, {
+      rate: 1.0,
+      lang: 'es-AR',
+      guard: () => presentationOpen
+    });
+  } catch (e) {}
 }
 
 const presentationReplayVoiceBtn = document.getElementById('presentationReplayVoiceBtn');
