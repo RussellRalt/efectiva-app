@@ -1877,18 +1877,166 @@ function updateAppVersionBadge() {
   try {
     const el = document.getElementById('appVersionBadge');
     if (!el) return;
-    if (getDirectAndroidBridge()) {
-      el.textContent = 'v32 · 🔊';
-      el.title = 'Puente nativo Android TTS activo';
-    } else if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
-      el.textContent = 'v32 · APK viejo';
-      el.title = 'Actualizá el archivo efectiva-v32.apk para activar la voz nativa';
-    } else {
-      el.textContent = 'v32';
-    }
+    el.textContent = 'v33 · 🔊';
+    el.title = 'Efectiva v33 — Voz Neural OTA activa';
   } catch (_) {}
 }
-setTimeout(updateAppVersionBadge, 200);
+setTimeout(updateAppVersionBadge, 150);
+
+// === MOTOR MP3 NEURAL OTA (Funciona en cualquier APK Android WebView sin reinstalar) ===
+let __ttsAudioEl = null;
+let __ttsAudioUnlocked = false;
+const __ttsMp3Cache = new Map();
+
+function getTtsAudioElement() {
+  if (!__ttsAudioEl) {
+    __ttsAudioEl = document.createElement('audio');
+    __ttsAudioEl.id = 'efectivaTtsAudio';
+    __ttsAudioEl.preload = 'auto';
+    __ttsAudioEl.setAttribute('playsinline', '');
+    __ttsAudioEl.style.display = 'none';
+    if (document.body) document.body.appendChild(__ttsAudioEl);
+  }
+  return __ttsAudioEl;
+}
+
+function unlockTtsAudioElement() {
+  if (__ttsAudioUnlocked) return;
+  __ttsAudioUnlocked = true;
+  try {
+    const a = getTtsAudioElement();
+    a.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+    a.volume = 0.01;
+    const p = a.play();
+    if (p && typeof p.then === 'function') {
+      p.then(() => {
+        if (a.src.startsWith('data:audio/wav')) a.pause();
+        a.volume = 1.0;
+      }).catch(() => {
+        __ttsAudioUnlocked = false;
+        a.volume = 1.0;
+      });
+    } else {
+      a.volume = 1.0;
+    }
+  } catch (_) {
+    __ttsAudioUnlocked = false;
+  }
+}
+document.addEventListener('touchstart', unlockTtsAudioElement, { once: true, passive: true });
+document.addEventListener('click', unlockTtsAudioElement, { once: true, passive: true });
+
+async function fetchCloudTtsAudioSrc(chunkText) {
+  const key = chunkText.trim();
+  if (__ttsMp3Cache.has(key)) return __ttsMp3Cache.get(key);
+
+  // Proveedor 1: Voz Neural Español Latino (es_mx_002) vía base64 MP3 (CORS abierto)
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4500);
+    const res = await fetch('https://tiktok-tts.weilnet.workers.dev/api/generation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: key, voice: 'es_mx_002' }),
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success && json.data && json.data.length > 100) {
+        const dataUri = 'data:audio/mp3;base64,' + json.data;
+        if (__ttsMp3Cache.size >= 30) {
+          const oldest = __ttsMp3Cache.keys().next().value;
+          __ttsMp3Cache.delete(oldest);
+        }
+        __ttsMp3Cache.set(key, dataUri);
+        return dataUri;
+      }
+    }
+  } catch (_) {}
+
+  // Proveedor 2 (Respaldo instantáneo): Google Translate TTS MP3 (funciona con <meta name="referrer" content="no-referrer">)
+  return 'https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=es&q=' + encodeURIComponent(key);
+}
+
+function playSingleAudioSrc(audioEl, src, rate, mySession, guard) {
+  return new Promise((resolve, reject) => {
+    if (mySession !== speechSessionId || !guard()) {
+      resolve({ stopped: true });
+      return;
+    }
+    const cleanup = () => {
+      audioEl.onended = null;
+      audioEl.onerror = null;
+      clearTimeout(safetyTimer);
+    };
+    const safetyTimer = setTimeout(() => {
+      cleanup();
+      resolve({ timeout: true });
+    }, 28000);
+
+    audioEl.onended = () => { cleanup(); resolve({ ok: true }); };
+    audioEl.onerror = (e) => { cleanup(); reject(new Error('Audio MP3 error')); };
+    audioEl.volume = 1.0;
+    audioEl.src = src;
+    try { audioEl.playbackRate = Math.max(0.75, Math.min(1.5, Number(rate) || 1.0)); } catch (_) {}
+    const p = audioEl.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch((err) => { cleanup(); reject(err); });
+    }
+  });
+}
+
+async function speakViaCloudMp3(chunks, opts = {}, mySession) {
+  const rate = opts.rate || 1.0;
+  const onStart = opts.onStart;
+  const onEnd = opts.onEnd;
+  const guard = opts.guard || (() => true);
+  const verbose = !!opts.verbose;
+  const audioEl = getTtsAudioElement();
+
+  if (!navigator.onLine) {
+    if (verbose) showVoiceNotice('📴 Conectate a internet para reproducir la voz');
+    if (typeof onEnd === 'function') onEnd();
+    return;
+  }
+
+  try {
+    showGlobalSpeechBar();
+    if (typeof onStart === 'function') onStart();
+
+    // Pre-cargar primer fragmento y mantener 1 fragmento adelantado (cero pausas entre oraciones)
+    let nextPromise = fetchCloudTtsAudioSrc(chunks[0]);
+    for (let i = 0; i < chunks.length; i++) {
+      if (mySession !== speechSessionId || !guard()) break;
+      const currentSrc = await nextPromise;
+      if (i + 1 < chunks.length && mySession === speechSessionId && guard()) {
+        nextPromise = fetchCloudTtsAudioSrc(chunks[i + 1]);
+      }
+      if (mySession !== speechSessionId || !guard()) break;
+
+      try {
+        await playSingleAudioSrc(audioEl, currentSrc, rate, mySession, guard);
+      } catch (_) {
+        // Si falló el proveedor 1 en reproducción, probar directo el respaldo Google MP3
+        if (mySession !== speechSessionId || !guard()) break;
+        const fallbackUrl = 'https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=es&q=' + encodeURIComponent(chunks[i]);
+        if (currentSrc !== fallbackUrl) {
+          await playSingleAudioSrc(audioEl, fallbackUrl, rate, mySession, guard);
+        }
+      }
+    }
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err || 'Error de audio');
+    console.warn('[Cloud MP3 TTS]:', msg);
+    if (verbose) showVoiceNotice('⚠️ No se pudo reproducir el audio (' + msg + ')');
+  } finally {
+    if (mySession === speechSessionId) {
+      hideGlobalSpeechBar();
+      if (typeof onEnd === 'function') onEnd();
+    }
+  }
+}
 
 function getNativeTTSPlugin() {
   return getDirectAndroidBridge() || getCustomNativeTTSPlugin() || getCommunityNativeTTSPlugin();
@@ -1934,6 +2082,14 @@ function stopAllSpeechSynthesis(skipNativeStop = false) {
     if (commTts && typeof commTts.stop === 'function') {
       try { commTts.stop().catch(() => {}); } catch (_) {}
     }
+  }
+  if (__ttsAudioEl) {
+    try {
+      __ttsAudioEl.onended = null;
+      __ttsAudioEl.onerror = null;
+      __ttsAudioEl.pause();
+      __ttsAudioEl.removeAttribute('src');
+    } catch (_) {}
   }
   if ('speechSynthesis' in window) {
     try {
@@ -2071,17 +2227,12 @@ window.EfectivaTTS = {
       return;
     }
 
-    // 3) Navegador web / PWA: Web Speech API
+    // 3) En APK Capacitor (Android WebView) o visores sin speechSynthesis real: usar Motor MP3 Neural OTA directo (sin reinstalar APK)
     stopAllSpeechSynthesis(true);
     const mySession = speechSessionId;
-    const hasCap = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
-    if (!('speechSynthesis' in window)) {
-      if (verbose) {
-        showVoiceNotice(hasCap
-          ? '⚠️ Tu APK aún no tiene voz nativa: instalá efectiva-v32.apk'
-          : '⚠️ Sin puente nativo Android (instalá efectiva-v32.apk) ni voz web');
-      }
-      if (typeof onEnd === 'function') onEnd();
+    const isCapacitorWebView = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+    if (isCapacitorWebView || !('speechSynthesis' in window)) {
+      await speakViaCloudMp3(chunks, opts, mySession);
       return;
     }
     try {
@@ -2116,9 +2267,9 @@ window.EfectivaTTS = {
         speakNextWebChunk();
       };
       u.onerror = () => {
-        if (mySession === speechSessionId) {
-          hideGlobalSpeechBar();
-          if (typeof onEnd === 'function') onEnd();
+        // Si speechSynthesis falla en este navegador móvil, caer automáticamente al Motor MP3 Neural OTA
+        if (mySession === speechSessionId && guard()) {
+          speakViaCloudMp3(chunks.slice(idx), opts, mySession);
         }
       };
       window.speechSynthesis.speak(u);
@@ -3258,8 +3409,17 @@ function getCurrentPresentationStepText() {
   return extractStepText(presentationSteps[currentStepIndex]);
 }
 
-function splitTextForSpeech(text, maxLen = 190) {
-  const clean = String(text || '').replace(/[*_#`~>]/g, '').replace(/\s+/g, ' ').trim();
+function splitTextForSpeech(text, maxLen = 160) {
+  // Limpiar emojis, viñetas y símbolos para lectura natural y evitar superar límite UTF-8 de motores TTS
+  const clean = String(text || '')
+    .replace(/\p{Extended_Pictographic}/gu, ' ')
+    .replace(/[\uFE0F\u200D]/g, '')
+    .replace(/\[(\d{1,2}:\d{2})\s*[–—-]\s*(\d{1,2}:\d{2})\]/g, '$1 a $2.')
+    .replace(/[→⇒]/g, ', ')
+    .replace(/[—–·•]/g, '. ')
+    .replace(/[*_#`~>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (!clean) return [];
   if (clean.length <= maxLen) return [clean];
   const sentences = clean.split(/(?<=[.!?¡¿;:\n])\s+/);
@@ -3295,7 +3455,8 @@ function splitTextForSpeech(text, maxLen = 190) {
 function speakPresentationStep(stepText, forceReplay = false) {
   if (!presentationOpen || (!presentationAudioCoachEnabled && !forceReplay)) return;
   try {
-    const maxLen = window.EfectivaTTS?.isNativeAvailable() ? 320 : 190;
+    if (forceReplay) unlockTtsAudioElement();
+    const maxLen = window.EfectivaTTS?.isNativeAvailable() ? 280 : 160;
     const chunks = splitTextForSpeech(`Paso ${currentStepIndex + 1}: ${stepText || ''}`, maxLen);
     if (chunks.length === 0) return;
     window.EfectivaTTS.speakChunks(chunks, {
@@ -3500,6 +3661,7 @@ let stepAlarmBeepInterval = null;
 let stepAlarmActive = false;
 
 function unlockStepAlarmAudio() {
+  unlockTtsAudioElement();
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
