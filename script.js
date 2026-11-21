@@ -1873,6 +1873,23 @@ function getCommunityNativeTTSPlugin() {
   }
 }
 
+function updateAppVersionBadge() {
+  try {
+    const el = document.getElementById('appVersionBadge');
+    if (!el) return;
+    if (getDirectAndroidBridge()) {
+      el.textContent = 'v32 · 🔊';
+      el.title = 'Puente nativo Android TTS activo';
+    } else if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+      el.textContent = 'v32 · APK viejo';
+      el.title = 'Actualizá el archivo efectiva-v32.apk para activar la voz nativa';
+    } else {
+      el.textContent = 'v32';
+    }
+  } catch (_) {}
+}
+setTimeout(updateAppVersionBadge, 200);
+
 function getNativeTTSPlugin() {
   return getDirectAndroidBridge() || getCustomNativeTTSPlugin() || getCommunityNativeTTSPlugin();
 }
@@ -2061,8 +2078,8 @@ window.EfectivaTTS = {
     if (!('speechSynthesis' in window)) {
       if (verbose) {
         showVoiceNotice(hasCap
-          ? '⚠️ Tu APK aún no tiene el puente v31: instalá el APK v31 para voz nativa'
-          : '⚠️ Sin puente nativo Android (instalá APK v31) ni speechSynthesis web');
+          ? '⚠️ Tu APK aún no tiene voz nativa: instalá efectiva-v32.apk'
+          : '⚠️ Sin puente nativo Android (instalá efectiva-v32.apk) ni voz web');
       }
       if (typeof onEnd === 'function') onEnd();
       return;

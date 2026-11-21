@@ -37,12 +37,13 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
           cp app/build/outputs/apk/debug/app-debug.apk ../efectiva-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../efectiva-v32.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: efectiva-debug-apk
-          path: efectiva-debug.apk
+          name: efectiva-v32-apk
+          path: efectiva-v32.apk
 
       - name: Publish APK to GitHub Release (latest)
         env:
@@ -51,4 +52,4 @@ jobs:
           gh release delete latest --yes || true
           git tag -f latest
           git push -f origin latest
-          gh release create latest efectiva-debug.apk --title "Efectiva Android APK (Capacitor)" --notes "APK compilado automáticamente con Capacitor desde main."
+          gh release create latest efectiva-v32.apk efectiva-debug.apk --title "Efectiva Android APK v32 (Voz Nativa + OTA)" --notes "APK v32 con puente nativo Android TTS (EfectivaAndroidBridge) y actualización automática OTA."
