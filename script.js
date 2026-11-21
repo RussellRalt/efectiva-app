@@ -2445,6 +2445,8 @@ function startPresentation(task, restoredState = null) {
   startTimer();
   addMinimizeButton();
   setupDelayJustificationUI();
+  updateLinkedNoteInPresentation();
+  if (task.totalTime && currentStepCountdown > 0) scheduleNativeStepAlarm(currentStepCountdown, presentationSteps[currentStepIndex]);
   saveActivePresentationState();
 
   // Limpiar y registrar listeners de interacción (click y swipe vertical)
@@ -2512,7 +2514,7 @@ function updatePresentationUI() {
  * Click / Tap: si se pulsa a la derecha avanza, a la izquierda retrocede.
  */
 function handlePresentationClick(e) {
-  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn')) || e.target.closest('#presentationAudioCoachBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer')) || e.target.closest('#presentationAudioCoachBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer'))) return;
   if (isPresentationMinimized || isPresentationTransitioning) return;
 
   // Si acaba de ocurrir un swipe, descartar el clic sintético que emite el navegador móvil
@@ -2536,7 +2538,7 @@ function handlePresentationClick(e) {
  * Deslizar hacia abajo (Swipe Down) -> Regresa al paso anterior
  */
 function handleTouchStart(e) {
-  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer')) || e.target.closest('#presentationAudioCoachBtn'))) return;
   if (isPresentationMinimized || isPresentationTransitioning) return;
 
   if (e.touches && e.touches[0]) {
@@ -2577,7 +2579,7 @@ function handleTouchMove(e) {
 }
 
 function handleTouchEnd(e) {
-  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer')) || e.target.closest('#presentationAudioCoachBtn'))) return;
   if (isPresentationMinimized) return;
 
   if (isPresentationDragging) {
@@ -2633,7 +2635,7 @@ let mouseStartTime = 0;
 
 function handleMouseDown(e) {
   if (e.button !== 0) return;
-  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn')) || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer')) || e.target.closest('#presentationAudioCoachBtn'))) return;
   if (isPresentationMinimized || isPresentationTransitioning) return;
   mouseStartY = e.clientY;
   mouseStartX = e.clientX;
@@ -2776,6 +2778,7 @@ function advanceStepData() {
   stopStepOvertimeAlarm();
   if (currentPresentationTask) {
     currentPresentationTask.currentStepIndex = currentStepIndex;
+    if (currentPresentationTask.totalTime && currentStepCountdown > 0) scheduleNativeStepAlarm(currentStepCountdown, presentationSteps[currentStepIndex]); else cancelNativeStepAlarm();
     triggerAutomationEvent('paso_completado', {
       folderId: currentFolderId,
       task: currentPresentationTask,
@@ -2803,6 +2806,7 @@ function retreatStepData() {
   stopStepOvertimeAlarm();
   if (currentPresentationTask) {
     currentPresentationTask.currentStepIndex = currentStepIndex;
+    if (currentPresentationTask.totalTime && currentStepCountdown > 0) scheduleNativeStepAlarm(currentStepCountdown, presentationSteps[currentStepIndex]); else cancelNativeStepAlarm();
   }
   saveActivePresentationState();
 }
@@ -2978,7 +2982,7 @@ function showCongratulations() {
 
 function handleFinalClick(e) {
   // Si el click fue en el botón de minimizar, no hacer nada
-  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn'))) return;
+  if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer'))) return;
 
   // Removemos el listener para evitar llamadas duplicadas
   presentationModal.removeEventListener('click', handleFinalClick);
@@ -3171,6 +3175,35 @@ function setupDelayJustificationUI() {
   }
 }
 
+// === PUENTE NATIVO CAPACITOR PARA ALARMAS CON PANTALLA BLOQUEADA ===
+const NATIVE_STEP_ALARM_ID = 9001;
+
+async function scheduleNativeStepAlarm(secondsFromNow, stepText) {
+  try {
+    const LocalNotif = window.Capacitor?.Plugins?.LocalNotifications;
+    if (!LocalNotif || !secondsFromNow || secondsFromNow <= 0) return;
+    await LocalNotif.requestPermissions();
+    await LocalNotif.cancel({ notifications: [{ id: NATIVE_STEP_ALARM_ID }] });
+    await LocalNotif.schedule({
+      notifications: [{
+        id: NATIVE_STEP_ALARM_ID,
+        title: '⏰ Efectiva — ¡Tiempo agotado!',
+        body: 'Paso vencido: ' + String(stepText || 'Paso actual').slice(0, 100),
+        schedule: { at: new Date(Date.now() + secondsFromNow * 1000), allowWhileIdle: true },
+        sound: 'default'
+      }]
+    });
+  } catch (e) {}
+}
+
+async function cancelNativeStepAlarm() {
+  try {
+    const LocalNotif = window.Capacitor?.Plugins?.LocalNotifications;
+    if (!LocalNotif) return;
+    await LocalNotif.cancel({ notifications: [{ id: NATIVE_STEP_ALARM_ID }] });
+  } catch (e) {}
+}
+
 function triggerStepOvertimeAlarm() {
   if (presentationAlarmFired) return;
   presentationAlarmFired = true;
@@ -3354,7 +3387,7 @@ function setupMinimizedDrag() {
 
   function onPipPointerDown(e) {
     // No iniciar drag si el pointerdown fue en el botón maximizar
-    if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn'))) return;
+    if (e.target && e.target.closest && (e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer'))) return;
     // Solo primary pointer (evita multi-touch accidental)
     if (e.pointerType === 'mouse' && e.button !== 0) return;
 
@@ -3495,6 +3528,7 @@ function closePresentation(force = false) {
   presentationAlarmFired = false;
   stopAllSpeechSynthesis();
   stopStepOvertimeAlarm();
+  cancelNativeStepAlarm();
   clearActivePresentationState();
   timerDisplay.textContent = '00:00';
   timerDisplay.classList.remove('timer-overdue');
@@ -4245,6 +4279,12 @@ function releaseWakeLock() {
   function renderControlCenter() {
     body.innerHTML = '';
     if (activeTab === 'rules') {
+      const icsBtn = document.createElement('button');
+      icsBtn.type = 'button';
+      icsBtn.className = 'cc-ics-btn';
+      icsBtn.textContent = '📅 Exportar bloques a Calendario (.ics)';
+      icsBtn.addEventListener('click', () => { if (!exportScheduleToICS() && typeof asistaAlert === 'function') asistaAlert('No hay bloques horarios ni tareas agendadas para exportar.', { title: 'Calendario', type: 'info' }); });
+      body.appendChild(icsBtn);
       const rules = Array.isArray(automationRules) ? automationRules : [];
       if (rules.length === 0) {
         body.innerHTML = '<div class="cc-empty">No hay reglas de automatización aún.<br><small>Podés pedirle al asistente: "Cuando complete el paso 1 de X, creá la tarea Y" o "Cada día a las 08:00 iniciá mi rutina".</small></div>';
@@ -4477,3 +4517,153 @@ function releaseWakeLock() {
     if (installBtn) installBtn.remove();
   });
 })();
+
+
+/************************************************************************
+ * NOTAS VIVAS EN PLAY + QUICK START 1-CLIC + EXPORTADOR .ICS
+ ************************************************************************/
+function updateLinkedNoteInPresentation() {
+  const btn = document.getElementById('presentationLinkedNoteBtn');
+  const drawer = document.getElementById('presentationLinkedNoteDrawer');
+  if (!btn || !drawer) return;
+  drawer.style.display = 'none';
+  drawer.innerHTML = '';
+
+  if (!currentPresentationTask) {
+    btn.style.display = 'none';
+    return;
+  }
+
+  let allNotes = [];
+  try {
+    allNotes = (typeof notes !== 'undefined' && Array.isArray(notes))
+      ? notes
+      : JSON.parse(localStorage.getItem('asista_notes') || '[]');
+  } catch (e) { allNotes = []; }
+
+  const linked = allNotes.filter(n =>
+    n.taskId === currentPresentationTask.id ||
+    (currentFolderId && n.folderId === currentFolderId && !n.taskId)
+  );
+
+  if (linked.length === 0) {
+    btn.style.display = 'none';
+    return;
+  }
+
+  btn.style.display = 'inline-flex';
+  btn.textContent = '📝 Nota (' + linked.length + ')';
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    if (drawer.style.display === 'block') {
+      drawer.style.display = 'none';
+      return;
+    }
+    drawer.innerHTML = '';
+    linked.slice(0, 3).forEach(n => {
+      const box = document.createElement('div');
+      box.className = 'pres-note-item';
+      const h = document.createElement('strong');
+      h.textContent = n.title || 'Nota';
+      const p = document.createElement('p');
+      p.textContent = (n.content || '').slice(0, 500);
+      box.append(h, p);
+      drawer.appendChild(box);
+    });
+    drawer.style.display = 'block';
+  };
+}
+
+function updateQuickStartButton() {
+  const box = document.getElementById('quickStartContainer');
+  const btn = document.getElementById('quickStartPlayBtn');
+  const titleEl = document.getElementById('quickStartTitle');
+  const subEl = document.getElementById('quickStartSub');
+  if (!box || !btn || !titleEl || !subEl) return;
+
+  let candidate = null;
+  let candidateFolder = null;
+  for (const f of (folders || [])) {
+    if (f.isDefaultRewards) continue;
+    const t = (f.tasks || []).find(x => Array.isArray(x.steps) && x.steps.length > 0);
+    if (t) {
+      candidate = t;
+      candidateFolder = f;
+      if (t.priority === 'alta') break;
+    }
+  }
+
+  if (!candidate) {
+    box.style.display = 'none';
+    return;
+  }
+
+  box.style.display = 'flex';
+  titleEl.textContent = 'Empezar ahora: ' + candidate.name;
+  subEl.textContent = candidateFolder.name + ' · ' + candidate.steps.length + ' pasos' + (candidate.totalTime ? ' · ' + Math.round(candidate.totalTime / 60) + ' min' : '');
+  btn.onclick = () => {
+    openFolder(candidateFolder.id);
+    startPresentation(candidate);
+  };
+}
+
+// Llamar updateQuickStartButton cada vez que se renderizan carpetas
+const _origRenderFoldersForQS = renderFolders;
+renderFolders = function() {
+  _origRenderFoldersForQS.apply(this, arguments);
+  updateQuickStartButton();
+};
+setTimeout(updateQuickStartButton, 500);
+
+function exportScheduleToICS() {
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Efectiva//TimeBlocking//ES',
+    'CALSCALE:GREGORIAN'
+  ];
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+  let count = 0;
+
+  // Reglas hora_programada
+  (automationRules || []).forEach(r => {
+    if (r.activa === false || r.evento !== 'hora_programada' || !r.condicion?.hora) return;
+    const [hh, mm] = String(r.condicion.hora).split(':').map(Number);
+    if (isNaN(hh) || isNaN(mm)) return;
+    const start = `${dateStr}T${pad(hh)}${pad(mm)}00`;
+    const endMin = hh * 60 + mm + 30;
+    const end = `${dateStr}T${pad(Math.floor(endMin / 60) % 24)}${pad(endMin % 60)}00`;
+    const summary = r.parametros_accion?.nombre || 'Bloque Efectiva';
+    lines.push('BEGIN:VEVENT', 'UID:' + r.id + '@efectiva', 'DTSTART:' + start, 'DTEND:' + end, 'SUMMARY:' + summary, 'END:VEVENT');
+    count++;
+  });
+
+  // Tareas con scheduledTimestamp o dueDate
+  (folders || []).forEach(f => {
+    (f.tasks || []).forEach(t => {
+      if (t.scheduledTimestamp) {
+        const d = new Date(t.scheduledTimestamp);
+        const ds = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+        const durMin = t.totalTime ? Math.round(t.totalTime / 60) : 30;
+        const dEnd = new Date(d.getTime() + durMin * 60000);
+        const de = `${dEnd.getFullYear()}${pad(dEnd.getMonth() + 1)}${pad(dEnd.getDate())}T${pad(dEnd.getHours())}${pad(dEnd.getMinutes())}00`;
+        lines.push('BEGIN:VEVENT', 'UID:' + t.id + '@efectiva', 'DTSTART:' + ds, 'DTEND:' + de, 'SUMMARY:' + t.name, 'END:VEVENT');
+        count++;
+      }
+    });
+  });
+
+  lines.push('END:VCALENDAR');
+  if (count === 0) return false;
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'efectiva-agenda.ics';
+  a.click();
+  URL.revokeObjectURL(url);
+  return true;
+}
+window.exportScheduleToICS = exportScheduleToICS;

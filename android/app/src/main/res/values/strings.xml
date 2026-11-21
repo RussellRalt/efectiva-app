@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Efectiva</string>
+    <string name="title_activity_main">Efectiva</string>
+    <string name="package_name">com.russellralt.efectiva</string>
+    <string name="custom_url_scheme">com.russellralt.efectiva</string>
+</resources>

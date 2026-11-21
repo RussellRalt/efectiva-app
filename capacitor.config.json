@@ -1,0 +1,13 @@
+{
+  "appId": "com.russellralt.efectiva",
+  "appName": "Efectiva",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "iconColor": "#2563eb"
+    }
+  }
+}

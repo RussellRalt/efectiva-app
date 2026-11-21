@@ -52,6 +52,17 @@
       </button>
     </div>
 
+    <!-- Acceso rápido 1-clic: Empezar ahora -->
+    <div id="quickStartContainer" class="quick-start-container" style="display: none;">
+      <button id="quickStartPlayBtn" class="quick-start-btn" type="button">
+        <span class="qs-icon">▶</span>
+        <span class="qs-text">
+          <strong id="quickStartTitle">Empezar ahora</strong>
+          <small id="quickStartSub">Continuar tu rutina</small>
+        </span>
+      </button>
+    </div>
+
     <!-- Input para crear carpeta con Enter -->
     <div class="new-folder">
       <input type="text" id="newFolderInput" class="new-folder-input" placeholder="Agrega una carpeta (Enter)..." />
@@ -125,10 +136,14 @@
           <h3 class="presentation-task-name" id="presentationTaskName"></h3>
         </div>
         <div class="presentation-header-actions">
+          <button id="presentationLinkedNoteBtn" class="audio-coach-btn" style="display: none;" title="Ver nota vinculada a esta tarea">📝 Nota</button>
           <button id="presentationAudioCoachBtn" class="audio-coach-btn" title="Activar/Desactivar voz hablada Audio-Coach">📣 Voz ON</button>
         </div>
+        </div>
       </div>
+      
 
+      <div id="presentationLinkedNoteDrawer" class="pres-note-drawer" style="display: none;"></div>
       <!-- Barra de progreso segmentada estilo TikTok / Stories -->
       <div class="presentation-progress-bar-container" id="presentationProgressContainer"></div>
 

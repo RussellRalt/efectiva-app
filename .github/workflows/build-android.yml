@@ -1,0 +1,54 @@
+name: Build Android APK (Capacitor)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install dependencies & sync Capacitor
+        run: |
+          npm install
+          npm run cap:sync
+
+      - name: Build Debug APK with Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../efectiva-debug.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: efectiva-debug-apk
+          path: efectiva-debug.apk
+
+      - name: Publish APK to GitHub Release (latest)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes || true
+          git tag -f latest
+          git push -f origin latest
+          gh release create latest efectiva-debug.apk --title "Efectiva Android APK (Capacitor)" --notes "APK compilado automáticamente con Capacitor desde main."

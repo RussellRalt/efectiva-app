@@ -3461,3 +3461,99 @@ body.light-theme .cc-item {
   font-weight: 700;
   cursor: pointer;
 }
+
+
+/* === QUICK START 1-CLIC Y NOTAS VIVAS EN PLAY === */
+.quick-start-container {
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.85rem;
+}
+.quick-start-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.22) 0%, rgba(37, 99, 235, 0.28) 100%);
+  color: var(--ef-text);
+  cursor: pointer;
+  text-align: left;
+  box-shadow: 0 8px 24px rgba(14, 165, 233, 0.16);
+  transition: transform 0.16s ease, box-shadow 0.2s ease;
+}
+.quick-start-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(14, 165, 233, 0.28);
+}
+.qs-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+.qs-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.qs-text strong {
+  font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qs-text small {
+  font-size: 0.75rem;
+  color: var(--ef-text-muted);
+}
+
+.pres-note-drawer {
+  width: 100%;
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  text-align: left;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+body.light-theme .pres-note-drawer {
+  background: rgba(255, 255, 255, 0.95);
+  color: #0f172a;
+}
+.pres-note-item + .pres-note-item {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+.pres-note-item p {
+  margin: 4px 0 0 0;
+  white-space: pre-wrap;
+  opacity: 0.9;
+}
+
+.cc-ics-btn {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--ef-accent);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
