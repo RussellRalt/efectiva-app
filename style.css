@@ -3602,3 +3602,28 @@ body.light-theme .pres-note-drawer {
   gap: 8px;
   align-items: center;
 }
+
+
+/* === FIX PRESENTACION V23 === */
+.presentation-modal {
+  z-index: 10020 !important;
+}
+.presentation-modal.minimized {
+  z-index: 10000 !important;
+}
+.presentation-header-bar {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.presentation-task-info {
+  min-width: 120px;
+}
+.presentation-header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.presentation-card-wrapper {
+  min-height: 220px;
+  flex: 1 1 auto;
+  width: 100%;
+}

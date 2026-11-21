@@ -2895,7 +2895,10 @@ if (presentationAudioCoachBtn) {
 
 function showPresentationStep(direction = 'none') {
   updatePresentationUI();
-  const text = presentationSteps[currentStepIndex] || '';
+  const rawStep = presentationSteps[currentStepIndex];
+  const text = typeof rawStep === 'string'
+    ? rawStep
+    : (rawStep && typeof rawStep === 'object' ? String(rawStep.text || rawStep.texto || rawStep.descripcion || '') : '');
 
   // Limpiar estados de congrats si veníamos de allí
   presentationStep.style.textAlign = '';

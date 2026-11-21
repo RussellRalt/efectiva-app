@@ -1,4 +1,4 @@
-const CACHE = 'efectiva-v22';
+const CACHE = 'efectiva-v23';
 const APP_SHELL = [
   './',
   './index.html',
@@ -24,15 +24,21 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Network-First para el mismo origen: asegura que actualizaciones OTA y PWA lleguen al instante
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const isSameOrigin = new URL(event.request.url).origin === self.location.origin;
+  if (!isSameOrigin) return;
+
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
-      if (new URL(event.request.url).origin === self.location.origin) {
-        const copy = response.clone();
-        caches.open(CACHE).then((cache) => cache.put(event.request, copy));
-      }
-      return response;
-    }))
+    fetch(event.request, { cache: 'no-cache' })
+      .then((response) => {
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
