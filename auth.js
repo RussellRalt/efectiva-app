@@ -234,8 +234,27 @@
 
   window.addEventListener('online', () => flushPendingSync());
 
-  client.auth.onAuthStateChange((_event, session) => {
+  function showSetNewPasswordPrompt() {
+    const newPass = window.prompt('Recuperación de cuenta: escribí tu nueva contraseña (mínimo 6 caracteres):');
+    if (!newPass || newPass.trim().length < 6) return;
+    client.auth.updateUser({ password: newPass.trim() }).then(({ error }) => {
+      if (error) {
+        alert('No se pudo actualizar la contraseña: ' + error.message);
+      } else {
+        alert('Contraseña actualizada con éxito. Ya podés usarla en la APK y en la web.');
+      }
+    });
+  }
+
+  client.auth.onAuthStateChange((event, session) => {
     currentUser = session?.user || null;
+    if (event === 'PASSWORD_RECOVERY') {
+      hideAuth();
+      flushPendingSync();
+      window.dispatchEvent(new CustomEvent('efectiva:authenticated'));
+      setTimeout(showSetNewPasswordPrompt, 400);
+      return;
+    }
     if (currentUser) {
       hideAuth();
       flushPendingSync();
