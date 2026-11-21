@@ -2066,7 +2066,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
     const body = {
       model: AI_CONFIG.model, messages,
       tools: TOOLS, tool_choice: 'auto',
-      temperature: 0.4, max_tokens: 4000
+      temperature: 0.4, max_tokens: 8192
     };
     const res = await fetch(AI_CONFIG.baseUrl, {
       method: 'POST',
@@ -2168,6 +2168,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
     const toolTrace = (resumeJob && Array.isArray(resumeJob.toolTrace)) ? [...resumeJob.toolTrace] : [];
     const jobChatId = (resumeJob && resumeJob.chatId) ? resumeJob.chatId : currentChatId;
     let iterations = 0;
+    let emptyRetries = 0;
     let lastAssistantText = '';
 
     savePendingAiJob({
@@ -2203,10 +2204,30 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
         return { text: '❌ Respuesta inválida del modelo.', tools: toolTrace, history: messages };
       }
       const choice = data.choices[0];
-      const assistantMsg = choice.message || {};
-      messages.push(assistantMsg);
-      if (assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0) {
-        for (const call of assistantMsg.tool_calls) {
+      const rawAssistantMsg = choice.message || {};
+
+      // Extraer texto limpio aunque venga como array de bloques
+      let extractedContent = '';
+      if (typeof rawAssistantMsg.content === 'string') {
+        extractedContent = rawAssistantMsg.content;
+      } else if (Array.isArray(rawAssistantMsg.content)) {
+        extractedContent = rawAssistantMsg.content
+          .map(part => (typeof part === 'string' ? part : (part && part.text ? part.text : '')))
+          .join('\n');
+      }
+
+      // Sanitizar mensaje antes de añadirlo al historial (evita que campos extra como reasoning rompan el turno siguiente en OpenRouter)
+      const cleanAssistantMsg = {
+        role: 'assistant',
+        content: extractedContent || null
+      };
+      if (Array.isArray(rawAssistantMsg.tool_calls) && rawAssistantMsg.tool_calls.length > 0) {
+        cleanAssistantMsg.tool_calls = rawAssistantMsg.tool_calls;
+      }
+
+      if (cleanAssistantMsg.tool_calls && cleanAssistantMsg.tool_calls.length > 0) {
+        messages.push(cleanAssistantMsg);
+        for (const call of cleanAssistantMsg.tool_calls) {
           let args = {};
           try { args = JSON.parse(call.function.arguments || '{}'); } catch (e) { args = {}; }
           const fn = call.function.name;
@@ -2221,7 +2242,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
           messages.push({
             role: 'tool',
             tool_call_id: call.id,
-            content: JSON.stringify(result).slice(0, 80000)
+            content: JSON.stringify(result).slice(0, 60000)
           });
         }
         savePendingAiJob({
@@ -2234,9 +2255,33 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
         });
         continue;
       }
-      lastAssistantText = assistantMsg.content || '';
+
+      // Si el modelo devolvió respuesta vacía tras ejecutar tools (o por límite de tokens), reintentar automáticamente hasta 2 veces
+      if (!extractedContent.trim() && emptyRetries < 2) {
+        emptyRetries++;
+        messages.push({
+          role: 'user',
+          content: choice.finish_reason === 'length'
+            ? 'Tu respuesta anterior se cortó por longitud. Completa la acción pendiente (si falta editar algo, llama la herramienta ahora) y responde brevemente.'
+            : 'Ya recibiste el resultado de las herramientas. Ejecuta el cambio pedido por el usuario (si aún no lo aplicaste) y responde en español con el resultado.'
+        });
+        continue;
+      }
+
+      messages.push(cleanAssistantMsg);
+      lastAssistantText = extractedContent.trim();
       break;
     }
+
+    // Fallback útil si el modelo igualmente dejó el texto vacío tras ejecutar herramientas
+    if (!lastAssistantText && toolTrace.length > 0) {
+      const done = toolTrace.map(t => {
+        const msg = t.result && (t.result.mensaje || t.result.error);
+        return '• ' + t.tool + (msg ? ': ' + msg : '');
+      }).join('\n');
+      lastAssistantText = 'Ejecuté estas acciones:\n' + done;
+    }
+
     savePendingAiJob(null);
     return { text: lastAssistantText, tools: toolTrace, history: trimHistory(messages) };
   }
@@ -2380,7 +2425,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       setTimeout(() => input.focus(), 200);
     }
     function closePanel() {
-      panel.classList.remove('open'); if (typeof window.stopAllSpeechSynthesis === 'function') window.stopAllSpeechSynthesis();
+      panel.classList.remove('open');
       panel.style.display = 'none';
       fab.style.display = 'block';
     }
@@ -2855,6 +2900,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       renderHistory();
       renderChatTitle();
       speakAssistantText(result.text || '');
+      if (fab && !panel.classList.contains('open')) fab.classList.add('has-unread');
 
       if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
         try {
@@ -2877,6 +2923,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       if (!chat) { savePendingAiJob(null); return; }
 
       isResumingPendingJob = true;
+      if (fab) fab.classList.add('working');
       try {
         currentChatId = chat.id;
         saveCurrentId();
@@ -2888,6 +2935,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
         hideTyping();
       } finally {
         isResumingPendingJob = false;
+        if (fab) fab.classList.remove('working');
       }
     }
 
@@ -2904,6 +2952,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       if (!text || isProcessing) return;
       isProcessing = true;
       sendBtn.disabled = true;
+      if (fab) { fab.classList.add('working'); fab.classList.remove('has-unread'); }
       input.value = '';
       adjustInputHeight();
       addUserMsg(text);
@@ -2928,7 +2977,8 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       } finally {
         isProcessing = false;
         sendBtn.disabled = false;
-        input.focus();
+        if (fab) fab.classList.remove('working');
+        if (panel.classList.contains('open')) input.focus();
       }
     }
     async function runSkill(skill) {
