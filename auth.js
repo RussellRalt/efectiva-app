@@ -68,6 +68,11 @@
             <div class="auth-logo">✓</div>
             <h2 id="authTitle">Bienvenido a Efectiva</h2>
             <p class="auth-subtitle">Creá tu cuenta para guardar y sincronizar tus tareas desde cualquier dispositivo.</p>
+            <button id="authGoogleBtn" class="auth-google-btn" type="button">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-3l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.2 0-5.9-2.1-6.9-5H1.1v3.1C3.1 21.3 7.2 24 12 24z"/><path fill="#FBBC05" d="M5.1 14.2c-.2-.7-.4-1.5-.4-2.2s.1-1.5.4-2.2V6.7H1.1C.4 8.3 0 10.1 0 12s.4 3.7 1.1 5.3l4-3.1z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4C17.9 1.2 15.2 0 12 0 7.2 0 3.1 2.7 1.1 6.7l4 3.1c1-2.9 3.7-5 6.9-5z"/></svg>
+              <span>Continuar con Google</span>
+            </button>
+            <div class="auth-divider"><span>o con tu correo</span></div>
             <form id="authForm">
               <label for="authEmail">Correo electrónico</label>
               <input id="authEmail" type="email" autocomplete="email" placeholder="tu@email.com" required>
@@ -76,7 +81,10 @@
               <button id="authSubmit" type="submit">Iniciar sesión</button>
             </form>
             <p id="authMessage" class="auth-message">${message}</p>
-            <button id="authSwitch" class="auth-link" type="button">No tengo cuenta — Registrarme</button>
+            <div class="auth-links-row">
+              <button id="authSwitch" class="auth-link" type="button">No tengo cuenta — Registrarme</button>
+              <button id="authResetBtn" class="auth-link" type="button">Olvidé / Crear contraseña</button>
+            </div>
           </div>
         </div>`);
       document.body.appendChild(modal);
@@ -110,6 +118,63 @@
           messageEl.textContent = 'Cuenta creada. Revisá tu correo y confirmá tu cuenta antes de entrar.';
         }
       });
+
+      const googleBtn = modal.querySelector('#authGoogleBtn');
+      if (googleBtn) {
+        googleBtn.addEventListener('click', async () => {
+          const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+          const redirectTo = isNative
+            ? 'com.russellralt.efectiva://auth-callback'
+            : (window.location.origin + window.location.pathname);
+
+          messageEl.textContent = 'Abriendo Google...';
+          googleBtn.disabled = true;
+          try {
+            const { data, error } = await client.auth.signInWithOAuth({
+              provider: 'google',
+              options: {
+                redirectTo,
+                skipBrowserRedirect: isNative
+              }
+            });
+            if (error) {
+              messageEl.textContent = error.message;
+              googleBtn.disabled = false;
+              return;
+            }
+            if (isNative && data && data.url) {
+              const Browser = window.Capacitor?.Plugins?.Browser;
+              if (Browser && Browser.open) {
+                await Browser.open({ url: data.url });
+              } else {
+                window.open(data.url, '_system');
+              }
+            }
+          } catch (e) {
+            messageEl.textContent = 'Error con Google: ' + (e && e.message ? e.message : String(e));
+          } finally {
+            googleBtn.disabled = false;
+          }
+        });
+      }
+
+      const resetBtn = modal.querySelector('#authResetBtn');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', async () => {
+          const email = modal.querySelector('#authEmail').value.trim();
+          if (!email) {
+            messageEl.textContent = 'Escribí primero tu correo arriba para enviarte el enlace.';
+            return;
+          }
+          messageEl.textContent = 'Enviando enlace...';
+          const { error } = await client.auth.resetPasswordForEmail(email, {
+            redirectTo: 'https://russellralt.github.io/efectiva-app/'
+          });
+          messageEl.textContent = error
+            ? error.message
+            : 'Revisá tu correo: te enviamos un enlace para crear o cambiar tu contraseña.';
+        });
+      }
     }
     modal.style.display = 'flex';
   }
@@ -179,6 +244,34 @@
       showAuth();
     }
   });
+
+  // Capturar retorno de Google OAuth en APK Capacitor
+  try {
+    const CapApp = window.Capacitor?.Plugins?.App;
+    const CapBrowser = window.Capacitor?.Plugins?.Browser;
+    if (CapApp && CapApp.addListener) {
+      CapApp.addListener('appUrlOpen', async ({ url }) => {
+        if (!url || !url.includes('auth-callback')) return;
+        try { if (CapBrowser && CapBrowser.close) await CapBrowser.close(); } catch (_) {}
+        try {
+          const parsed = new URL(url);
+          const code = parsed.searchParams.get('code');
+          if (code && client.auth.exchangeCodeForSession) {
+            await client.auth.exchangeCodeForSession(code);
+            return;
+          }
+          const hash = parsed.hash ? new URLSearchParams(parsed.hash.replace(/^#/, '')) : null;
+          const access_token = hash && hash.get('access_token');
+          const refresh_token = hash && hash.get('refresh_token');
+          if (access_token && refresh_token) {
+            await client.auth.setSession({ access_token, refresh_token });
+          }
+        } catch (err) {
+          console.error('Error procesando retorno OAuth:', err);
+        }
+      });
+    }
+  } catch (_) {}
 
   client.auth.getSession().then(({ data }) => {
     currentUser = data.session?.user || null;
