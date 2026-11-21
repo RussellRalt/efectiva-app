@@ -2416,16 +2416,45 @@ function restoreActivePresentationIfAny() {
   }
 }
 
+function extractStepText(rawStep) {
+  if (typeof rawStep === 'string') return rawStep.trim();
+  if (rawStep && typeof rawStep === 'object') {
+    const direct = rawStep.text ?? rawStep.texto ?? rawStep.descripcion ?? rawStep.description ?? rawStep.title ?? rawStep.titulo ?? rawStep.content ?? rawStep.contenido ?? rawStep.name ?? rawStep.nombre ?? rawStep.paso ?? rawStep.step ?? rawStep.label;
+    if (typeof direct === 'string' && direct.trim()) return direct.trim();
+    for (const v of Object.values(rawStep)) {
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+  }
+  return '';
+}
+
 function startPresentation(task, restoredState = null) {
-  if (!task.steps || !task.steps.length) return;
+  if (!task || !Array.isArray(task.steps) || !task.steps.length) return;
   presentationSteps = task.steps;
-  currentStepIndex = restoredState
-    ? Math.max(0, Math.min(task.steps.length - 1, restoredState.currentStepIndex || 0))
-    : (task.currentStepIndex || 0);
+  const rawIdx = restoredState ? Number(restoredState.currentStepIndex) : Number(task.currentStepIndex);
+  currentStepIndex = (Number.isFinite(rawIdx) && rawIdx >= 0 && rawIdx < task.steps.length) ? Math.floor(rawIdx) : 0;
+  task.currentStepIndex = currentStepIndex;
   presentationOpen = true;
   currentPresentationTask = task;
   isPresentationTransitioning = false;
   isPresentationDragging = false;
+
+  // Garantizar estado visual limpio (nunca heredar posición PiP ni opacidad 0 de una sesión previa)
+  if (isPresentationMinimized) {
+    isPresentationMinimized = false;
+    teardownMinimizedDrag();
+  }
+  presentationModal.classList.remove('minimized');
+  presentationModal.style.left = '';
+  presentationModal.style.top = '';
+  presentationModal.style.right = '';
+  presentationModal.style.bottom = '';
+  presentationModal.style.width = '';
+  presentationModal.style.height = '';
+  presentationModal.style.transform = '';
+  presentationStep.style.opacity = '1';
+  presentationStep.style.transform = 'translateY(0px)';
+  presentationStep.style.transition = '';
 
   if (task.totalTime && task.steps.length > 0) {
     if (!task.stepTimes || task.stepTimes.length !== task.steps.length) {
@@ -2854,14 +2883,13 @@ function retreatStepData() {
  */
 function fitPresentationText(el, text, opts) {
   opts = opts || {};
-  const minFontRem = opts.minFontRem || 0.98;
-  const maxHeightRatio = opts.maxHeightRatio || 0.56;
+  const minFontRem = opts.minFontRem || 0.96;
 
   el.classList.remove('has-scroll');
   el.innerHTML = '';
   const inner = document.createElement('div');
   inner.className = 'presentation-step-inner';
-  inner.textContent = text || '';
+  inner.textContent = text || '(Paso sin texto)';
   el.appendChild(inner);
   el.scrollTop = 0;
 
@@ -2869,40 +2897,34 @@ function fitPresentationText(el, text, opts) {
 
   let fontRem;
   if (len < 30) {
-    fontRem = 2.2;
+    fontRem = 2.35;
   } else if (len < 75) {
-    fontRem = 1.68;
+    fontRem = 1.78;
   } else if (len < 180) {
-    fontRem = 1.28;
+    fontRem = 1.32;
   } else if (len < 420) {
-    fontRem = 1.08;
+    fontRem = 1.1;
   } else {
-    fontRem = 1.0;
+    fontRem = 1.02;
   }
-
-  const wrapper = document.getElementById('presentationCardWrapper');
-  const viewportH = window.innerHeight || 800;
-  const wrapperH = (wrapper && wrapper.clientHeight > 120) ? wrapper.clientHeight : Math.max(200, viewportH * maxHeightRatio);
-  const maxH = Math.max(180, wrapperH);
 
   el.style.fontSize = fontRem + 'rem';
   el.style.lineHeight = len < 50 ? '1.32' : '1.5';
   el.style.letterSpacing = len < 30 ? '0.02em' : 'normal';
   el.style.wordBreak = 'break-word';
   el.style.overflowWrap = 'break-word';
-  el.style.maxHeight = maxH + 'px';
+  el.style.maxHeight = '';
   el.style.overflowY = 'auto';
 
-  let attempts = 0;
-  while (el.scrollHeight > maxH && fontRem > minFontRem && attempts < 18) {
-    fontRem = Math.max(minFontRem, Math.round((fontRem - 0.08) * 100) / 100);
-    el.style.fontSize = fontRem + 'rem';
-    attempts++;
-  }
-
-  const syncScrollFlag = () => {
-    const curWrapperH = (wrapper && wrapper.clientHeight > 120) ? wrapper.clientHeight : maxH;
-    el.style.maxHeight = curWrapperH + 'px';
+  const measureAndFit = () => {
+    const boxH = el.clientHeight || Math.max(220, (window.innerHeight || 800) * 0.55);
+    let f = parseFloat(el.style.fontSize) || fontRem;
+    let attempts = 0;
+    while (el.scrollHeight > boxH + 4 && f > minFontRem && attempts < 18) {
+      f = Math.max(minFontRem, Math.round((f - 0.08) * 100) / 100);
+      el.style.fontSize = f + 'rem';
+      attempts++;
+    }
     const needsScroll = el.scrollHeight > (el.clientHeight + 6);
     el.classList.toggle('has-scroll', needsScroll);
     if (el === presentationStep) {
@@ -2912,12 +2934,11 @@ function fitPresentationText(el, text, opts) {
     return needsScroll;
   };
 
-  const needsScroll = syncScrollFlag();
-  // Re-medir tras el primer frame real de layout (clave al abrir modal desde display:none)
+  const needsScroll = measureAndFit();
   if (typeof requestAnimationFrame === 'function') {
     requestAnimationFrame(() => {
       if (el.isConnected && el.firstElementChild === inner) {
-        syncScrollFlag();
+        measureAndFit();
       }
     });
   }
@@ -2926,7 +2947,7 @@ function fitPresentationText(el, text, opts) {
     finalFontRem: parseFloat(el.style.fontSize),
     chars: len,
     scrollHeight: el.scrollHeight,
-    maxHeight: maxH,
+    maxHeight: el.clientHeight,
     fit: !needsScroll
   };
 }
@@ -2934,10 +2955,7 @@ function fitPresentationText(el, text, opts) {
 let presentationAudioCoachEnabled = true;
 
 function getCurrentPresentationStepText() {
-  const rawStep = presentationSteps[currentStepIndex];
-  return typeof rawStep === 'string'
-    ? rawStep
-    : (rawStep && typeof rawStep === 'object' ? String(rawStep.text || rawStep.texto || rawStep.descripcion || '') : '');
+  return extractStepText(presentationSteps[currentStepIndex]);
 }
 
 function splitTextForSpeech(text, maxLen = 190) {
@@ -3035,11 +3053,12 @@ if (presentationAudioCoachBtn) {
 }
 
 function showPresentationStep(direction = 'none') {
+  if (!Array.isArray(presentationSteps) || presentationSteps.length === 0) return;
+  if (!Number.isFinite(currentStepIndex) || currentStepIndex < 0 || currentStepIndex >= presentationSteps.length) {
+    currentStepIndex = 0;
+  }
   updatePresentationUI();
-  const rawStep = presentationSteps[currentStepIndex];
-  const text = typeof rawStep === 'string'
-    ? rawStep
-    : (rawStep && typeof rawStep === 'object' ? String(rawStep.text || rawStep.texto || rawStep.descripcion || '') : '');
+  const text = extractStepText(presentationSteps[currentStepIndex]);
 
   // Limpiar estados de congrats si veníamos de allí
   presentationStep.style.textAlign = '';
