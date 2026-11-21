@@ -3782,6 +3782,28 @@ body.light-theme .pres-note-drawer {
   transform: scale(0.95);
 }
 
+/* Contraste legible en Tema Claro para botones del modal de presentación (v31) */
+body.light-theme .presentation-modal .audio-coach-btn {
+  background: rgba(15, 23, 42, 0.07);
+  border-color: rgba(15, 23, 42, 0.16);
+  color: #0f172a;
+}
+body.light-theme .presentation-modal .replay-voice-btn {
+  background: rgba(2, 132, 199, 0.12);
+  border-color: rgba(2, 132, 199, 0.35);
+  color: #0369a1;
+}
+body.light-theme .presentation-modal .close-pres-btn {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #b91c1c;
+}
+body.light-theme .presentation-modal .justify-delay-btn {
+  background: rgba(15, 23, 42, 0.06);
+  border-color: rgba(15, 23, 42, 0.16);
+  color: #0f172a;
+}
+
 /* Modo Minimizado PiP limpio en Flexbox v28 */
 .presentation-modal.minimized .presentation-content {
   gap: 4px !important;

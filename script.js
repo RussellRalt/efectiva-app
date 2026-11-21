@@ -1828,6 +1828,31 @@ function showVoiceNotice(msg) {
   } catch (_) {}
 }
 
+const __androidTtsWaiters = new Map();
+window.__efectivaAndroidTtsEvent = function (utteranceId, type, errMsg) {
+  const waiter = __androidTtsWaiters.get(utteranceId);
+  if (!waiter) return;
+  if (type === 'start') {
+    if (typeof waiter.onStart === 'function') waiter.onStart();
+    return;
+  }
+  __androidTtsWaiters.delete(utteranceId);
+  if (type === 'error') {
+    waiter.reject(new Error(errMsg || 'Error TTS Android'));
+  } else {
+    waiter.resolve({ type });
+  }
+};
+
+function getDirectAndroidBridge() {
+  try {
+    const b = window.EfectivaAndroidBridge;
+    return (b && typeof b.speak === 'function') ? b : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function getCustomNativeTTSPlugin() {
   try {
     const isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
@@ -1849,7 +1874,7 @@ function getCommunityNativeTTSPlugin() {
 }
 
 function getNativeTTSPlugin() {
-  return getCustomNativeTTSPlugin() || getCommunityNativeTTSPlugin();
+  return getDirectAndroidBridge() || getCustomNativeTTSPlugin() || getCommunityNativeTTSPlugin();
 }
 
 async function resolveNativeSpanishLang(tts) {
@@ -1876,7 +1901,14 @@ async function resolveNativeSpanishLang(tts) {
 
 function stopAllSpeechSynthesis(skipNativeStop = false) {
   speechSessionId++;
+  // Resolver cualquier waiter pendiente del puente directo Android
+  __androidTtsWaiters.forEach((w) => { try { w.resolve({ type: 'stop' }); } catch (_) {} });
+  __androidTtsWaiters.clear();
   if (!skipNativeStop) {
+    const directBridge = getDirectAndroidBridge();
+    if (directBridge && typeof directBridge.stop === 'function') {
+      try { directBridge.stop(); } catch (_) {}
+    }
     const customTts = getCustomNativeTTSPlugin();
     if (customTts && typeof customTts.stop === 'function') {
       try { customTts.stop().catch(() => {}); } catch (_) {}
@@ -1895,7 +1927,7 @@ function stopAllSpeechSynthesis(skipNativeStop = false) {
 }
 window.stopAllSpeechSynthesis = stopAllSpeechSynthesis;
 
-// Motor unificado de voz (v30: Plugin nativo propio EfectivaTts -> TextToSpeech -> Web Speech API)
+// Motor unificado de voz (v31: EfectivaAndroidBridge directo -> EfectivaTts -> TextToSpeech -> Web Speech API)
 window.EfectivaTTS = {
   isNativeAvailable() {
     return !!getNativeTTSPlugin();
@@ -1909,10 +1941,60 @@ window.EfectivaTTS = {
     const guard = opts.guard || (() => true);
     const verbose = !!opts.verbose;
 
-    // 1) Prioridad máxima: Plugin nativo propio EfectivaTts (cero race conditions, AUDIO STREAM_MUSIC, sin rechazos por dialecto)
+    // 0) Prioridad absoluta: puente directo @JavascriptInterface EfectivaAndroidBridge (inmune a SW y Capacitor origin rules)
+    const directBridge = getDirectAndroidBridge();
+    if (directBridge) {
+      stopAllSpeechSynthesis(true);
+      const mySession = speechSessionId;
+      try {
+        if (typeof directBridge.getStatusJson === 'function') {
+          const st = JSON.parse(directBridge.getStatusJson() || '{}');
+          if (typeof st.mediaVolume === 'number' && st.mediaVolume === 0) {
+            showVoiceNotice('🔇 Subí el volumen multimedia del teléfono para escuchar la voz');
+          }
+        }
+      } catch (_) {}
+
+      let startedNotified = false;
+      try {
+        showGlobalSpeechBar();
+        for (let i = 0; i < chunks.length; i++) {
+          if (mySession !== speechSessionId || !guard()) break;
+          const uid = 'ef_' + mySession + '_' + i + '_' + Date.now();
+          await new Promise((resolve, reject) => {
+            const timeoutId = setTimeout(() => {
+              __androidTtsWaiters.delete(uid);
+              resolve({ type: 'timeout' });
+            }, 35000);
+            __androidTtsWaiters.set(uid, {
+              onStart: () => {
+                if (!startedNotified && typeof onStart === 'function') {
+                  startedNotified = true;
+                  onStart();
+                }
+              },
+              resolve: (val) => { clearTimeout(timeoutId); resolve(val); },
+              reject: (err) => { clearTimeout(timeoutId); reject(err); }
+            });
+            directBridge.speak(chunks[i], Number(rate) || 1.0, uid);
+          });
+        }
+      } catch (err) {
+        const msg = err && err.message ? err.message : String(err || 'Error TTS');
+        console.warn('[EfectivaAndroidBridge]:', msg);
+        if (verbose) showVoiceNotice('⚠️ Voz Android: ' + msg);
+      } finally {
+        if (mySession === speechSessionId) {
+          hideGlobalSpeechBar();
+          if (typeof onEnd === 'function') onEnd();
+        }
+      }
+      return;
+    }
+
+    // 1) Respaldo nativo: Plugin Capacitor EfectivaTts
     const customTts = getCustomNativeTTSPlugin();
     if (customTts) {
-      // No disparar stop() asíncrono en paralelo: EfectivaTts.speak() detiene sincrónicamente en el mismo hilo
       stopAllSpeechSynthesis(true);
       const mySession = speechSessionId;
       try {
@@ -1942,7 +2024,7 @@ window.EfectivaTTS = {
       return;
     }
 
-    // 2) Respaldo: Plugin comunitario TextToSpeech (esperando stop() antes de speak() para evitar carrera)
+    // 2) Respaldo: Plugin comunitario TextToSpeech
     const commTts = getCommunityNativeTTSPlugin();
     if (commTts) {
       stopAllSpeechSynthesis(true);
@@ -1975,12 +2057,13 @@ window.EfectivaTTS = {
     // 3) Navegador web / PWA: Web Speech API
     stopAllSpeechSynthesis(true);
     const mySession = speechSessionId;
-    const isNativeWithoutPlugin = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
-    if (isNativeWithoutPlugin && verbose) {
-      showVoiceNotice('⚠️ Actualizá el APK a v30 para activar la voz nativa de Android');
-    }
+    const hasCap = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
     if (!('speechSynthesis' in window)) {
-      if (verbose) showVoiceNotice('⚠️ Este visor no soporta síntesis de voz web');
+      if (verbose) {
+        showVoiceNotice(hasCap
+          ? '⚠️ Tu APK aún no tiene el puente v31: instalá el APK v31 para voz nativa'
+          : '⚠️ Sin puente nativo Android (instalá APK v31) ni speechSynthesis web');
+      }
       if (typeof onEnd === 'function') onEnd();
       return;
     }
