@@ -761,6 +761,11 @@ function renameFolder(folder) {
  * PAPELERA
  ************************************************************************/
 function moveFolderToTrash(folderId) {
+  if (presentationOpen && currentFolderId === folderId) {
+    closePresentation(true);
+  } else {
+    stopAllSpeechSynthesis();
+  }
   const idx = folders.findIndex(f => f.id === folderId);
   if (idx === -1) return;
 
@@ -1760,13 +1765,50 @@ function addXP(amount, motivo) {
 }
 
 let audioCoachConfig = { habilitado: true, anunciar_pasos: true };
+function showGlobalSpeechBar() {
+  let pill = document.getElementById('globalSpeechStopPill');
+  if (!pill) {
+    pill = document.createElement('div');
+    pill.id = 'globalSpeechStopPill';
+    pill.className = 'global-speech-pill';
+    pill.innerHTML = '<span class="speech-wave">🔊 Leyendo...</span><button type="button" id="globalSpeechStopBtn" title="Detener narración">⏹ Detener</button>';
+    document.body.appendChild(pill);
+    const stopBtn = pill.querySelector('#globalSpeechStopBtn');
+    if (stopBtn) {
+      stopBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        stopAllSpeechSynthesis();
+      });
+    }
+  }
+  pill.style.display = 'inline-flex';
+}
+
+function hideGlobalSpeechBar() {
+  const pill = document.getElementById('globalSpeechStopPill');
+  if (pill) pill.style.display = 'none';
+}
+
+function stopAllSpeechSynthesis() {
+  if (!('speechSynthesis' in window)) return;
+  try {
+    window.speechSynthesis.pause();
+    window.speechSynthesis.cancel();
+  } catch (e) {}
+  hideGlobalSpeechBar();
+}
+window.stopAllSpeechSynthesis = stopAllSpeechSynthesis;
+
 function speakAudioCoach(text) {
   if (!audioCoachConfig.habilitado || !('speechSynthesis' in window)) return;
   try {
-    window.speechSynthesis.cancel();
+    stopAllSpeechSynthesis();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'es-AR';
     u.rate = 1.0;
+    u.onstart = () => showGlobalSpeechBar();
+    u.onend = () => hideGlobalSpeechBar();
+    u.onerror = () => hideGlobalSpeechBar();
     window.speechSynthesis.speak(u);
   } catch(e) {}
 }
@@ -2406,6 +2448,7 @@ function startPresentation(task, restoredState = null) {
   saveActivePresentationState();
 
   // Limpiar y registrar listeners de interacción (click y swipe vertical)
+  stopAllSpeechSynthesis();
   presentationModal.removeEventListener('click', handleFinalClick);
   presentationModal.removeEventListener('click', handlePresentationClick);
   presentationModal.removeEventListener('touchstart', handleTouchStart);
@@ -2818,14 +2861,17 @@ function fitPresentationText(el, text, opts) {
 let presentationAudioCoachEnabled = true;
 
 function speakPresentationStep(stepText) {
-  if (!presentationAudioCoachEnabled || !('speechSynthesis' in window)) return;
+  if (!presentationOpen || !presentationAudioCoachEnabled || !('speechSynthesis' in window)) return;
   try {
-    window.speechSynthesis.cancel();
+    stopAllSpeechSynthesis();
     const clean = (stepText || '').replace(/[*_#`~>]/g, '');
     if (!clean.trim()) return;
     const u = new SpeechSynthesisUtterance(`Paso ${currentStepIndex + 1}: ${clean}`);
     u.lang = 'es-AR';
     u.rate = 1.0;
+    u.onstart = () => { if (presentationOpen) showGlobalSpeechBar(); else stopAllSpeechSynthesis(); };
+    u.onend = () => hideGlobalSpeechBar();
+    u.onerror = () => hideGlobalSpeechBar();
     window.speechSynthesis.speak(u);
   } catch(e) {}
 }
@@ -2837,8 +2883,8 @@ if (presentationAudioCoachBtn) {
     presentationAudioCoachEnabled = !presentationAudioCoachEnabled;
     presentationAudioCoachBtn.textContent = presentationAudioCoachEnabled ? '📣 Voz ON' : '🔇 Voz OFF';
     presentationAudioCoachBtn.classList.toggle('active', presentationAudioCoachEnabled);
-    if (!presentationAudioCoachEnabled && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+    if (!presentationAudioCoachEnabled) {
+      stopAllSpeechSynthesis();
     }
   };
 }
@@ -2886,6 +2932,7 @@ function showPresentationStep(direction = 'none') {
 }
 
 function showCongratulations() {
+  stopAllSpeechSynthesis();
   updatePresentationUI();
   const counterEl = document.getElementById('presentationStepCounter');
   if (counterEl) counterEl.textContent = '¡Completado!';
@@ -3446,6 +3493,7 @@ function closePresentation(force = false) {
   presentationStepStartedAt = null;
   presentationBaseSeconds = 0;
   presentationAlarmFired = false;
+  stopAllSpeechSynthesis();
   stopStepOvertimeAlarm();
   clearActivePresentationState();
   timerDisplay.textContent = '00:00';
@@ -4390,5 +4438,42 @@ function releaseWakeLock() {
       activeTab = tabBtn.dataset.ccTab || 'rules';
       renderControlCenter();
     });
+  });
+})();
+
+
+/************************************************************************
+ * INSTALACIÓN PWA (APP INSTALABLE CON 1 TOQUE)
+ ************************************************************************/
+(function setupPwaInstallButton() {
+  let deferredInstallPrompt = null;
+  const topBar = document.querySelector('.top-icon-bar');
+  if (!topBar) return;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    let installBtn = document.getElementById('pwaInstallBtn');
+    if (!installBtn) {
+      installBtn = document.createElement('button');
+      installBtn.id = 'pwaInstallBtn';
+      installBtn.className = 'icon-button pwa-install-btn';
+      installBtn.title = 'Instalar Efectiva como App';
+      installBtn.innerHTML = '📲';
+      installBtn.addEventListener('click', async () => {
+        if (!deferredInstallPrompt) return;
+        deferredInstallPrompt.prompt();
+        try { await deferredInstallPrompt.userChoice; } catch (err) {}
+        deferredInstallPrompt = null;
+        installBtn.remove();
+      });
+      topBar.appendChild(installBtn);
+    }
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    const installBtn = document.getElementById('pwaInstallBtn');
+    if (installBtn) installBtn.remove();
   });
 })();

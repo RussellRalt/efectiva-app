@@ -2380,7 +2380,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       setTimeout(() => input.focus(), 200);
     }
     function closePanel() {
-      panel.classList.remove('open');
+      panel.classList.remove('open'); if (typeof window.stopAllSpeechSynthesis === 'function') window.stopAllSpeechSynthesis();
       panel.style.display = 'none';
       fab.style.display = 'block';
     }
