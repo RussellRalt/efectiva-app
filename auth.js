@@ -223,8 +223,45 @@
     queueSync({ aiChats: chats, aiCurrentChatId: currentChatId || null });
   }
 
+  async function getAccessToken() {
+    try {
+      const { data } = await client.auth.getSession();
+      return data?.session?.access_token || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function flushNow() {
+    clearTimeout(syncTimer);
+    await flushPendingSync();
+  }
+
+  async function getCloudJob() {
+    const data = await loadData();
+    return (data && data.aiCloudJob && typeof data.aiCloudJob === 'object') ? data.aiCloudJob : null;
+  }
+
+  async function clearCloudJob(jobId) {
+    if (!currentUser || !navigator.onLine) return;
+    try {
+      const current = await loadData();
+      if (!current || !current.aiCloudJob) return;
+      if (jobId && current.aiCloudJob.jobId !== jobId) return;
+      const next = { ...current };
+      next.aiCloudJob = { ...current.aiCloudJob, consumed: true, state: null };
+      await saveData(next);
+    } catch (_) {}
+  }
+
   window.EfectivaCloud = {
+    supabaseUrl: SUPABASE_URL,
+    supabaseKey: SUPABASE_KEY,
     get user() { return currentUser; },
+    getAccessToken,
+    flushNow,
+    getCloudJob,
+    clearCloudJob,
     loadData,
     scheduleSave,
     loadAIChats,

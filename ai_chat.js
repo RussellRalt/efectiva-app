@@ -2914,8 +2914,243 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       }
     }
 
+    // ---------- CLOUD AGENT (SUPABASE EDGE FUNCTION v26) ----------
+    const ACTIVE_CLOUD_JOB_KEY = 'efectivaActiveCloudJobV1';
+    const APPLIED_CLOUD_JOBS_KEY = 'efectivaAppliedCloudJobsV1';
+    let cloudPollTimer = null;
+    let isPollingCloudJob = false;
+    let cloudUnavailableUntil = 0;
+
+    function loadActiveCloudJob() {
+      try {
+        const raw = localStorage.getItem(ACTIVE_CLOUD_JOB_KEY);
+        if (!raw) return null;
+        const j = JSON.parse(raw);
+        if (!j || !j.jobId || (Date.now() - (j.startedAt || 0) > 10 * 60 * 1000)) {
+          localStorage.removeItem(ACTIVE_CLOUD_JOB_KEY);
+          return null;
+        }
+        return j;
+      } catch (_) { return null; }
+    }
+    function saveActiveCloudJob(job) {
+      try {
+        if (!job) localStorage.removeItem(ACTIVE_CLOUD_JOB_KEY);
+        else localStorage.setItem(ACTIVE_CLOUD_JOB_KEY, JSON.stringify(job));
+      } catch (_) {}
+    }
+    function hasAppliedCloudJob(jobId) {
+      if (!jobId) return false;
+      try {
+        const list = JSON.parse(localStorage.getItem(APPLIED_CLOUD_JOBS_KEY) || '[]');
+        return Array.isArray(list) && list.includes(jobId);
+      } catch (_) { return false; }
+    }
+    function markAppliedCloudJob(jobId) {
+      if (!jobId) return;
+      try {
+        let list = JSON.parse(localStorage.getItem(APPLIED_CLOUD_JOBS_KEY) || '[]');
+        if (!Array.isArray(list)) list = [];
+        if (!list.includes(jobId)) list.unshift(jobId);
+        localStorage.setItem(APPLIED_CLOUD_JOBS_KEY, JSON.stringify(list.slice(0, 30)));
+      } catch (_) {}
+    }
+    function stopCloudJobPolling() {
+      if (cloudPollTimer) {
+        clearTimeout(cloudPollTimer);
+        cloudPollTimer = null;
+      }
+    }
+    function canTryCloudAgent() {
+      return !!(
+        window.EfectivaCloud &&
+        window.EfectivaCloud.user &&
+        typeof window.EfectivaCloud.getAccessToken === 'function' &&
+        window.EfectivaStateBridge &&
+        navigator.onLine &&
+        AI_CONFIG.apiKey &&
+        Date.now() > cloudUnavailableUntil
+      );
+    }
+
+    async function dispatchCloudAgent(chat, userText, history) {
+      if (!canTryCloudAgent()) return null;
+      try {
+        if (typeof window.EfectivaCloud.flushNow === 'function') {
+          await window.EfectivaCloud.flushNow();
+        }
+        const token = await window.EfectivaCloud.getAccessToken();
+        if (!token) return null;
+
+        const jobId = 'job_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+        const endpoint = window.EfectivaCloud.supabaseUrl + '/functions/v1/efectiva-agent';
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 12000);
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'apikey': window.EfectivaCloud.supabaseKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            action: 'start',
+            jobId,
+            chatId: chat.id,
+            userText,
+            history,
+            apiKey: AI_CONFIG.apiKey,
+            model: AI_CONFIG.model,
+            baseUrl: AI_CONFIG.baseUrl,
+            systemPrompt: SYSTEM_PROMPT + getResumenEstadoRapido(),
+            tools: TOOLS,
+            state: window.EfectivaStateBridge.exportFullState()
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timer);
+
+        if (res.status === 404 || res.status === 401 || res.status === 502 || res.status === 503) {
+          // Edge Function aún no desplegada o no disponible: fallback transparente a modo local
+          if (res.status === 404) cloudUnavailableUntil = Date.now() + 5 * 60 * 1000;
+          return null;
+        }
+        if (!res.ok) return null;
+
+        const data = await res.json().catch(() => null);
+        if (!data || !data.accepted) return null;
+
+        saveActiveCloudJob({
+          jobId,
+          chatId: chat.id,
+          userText,
+          startedAt: Date.now()
+        });
+        return { jobId };
+      } catch (_) {
+        // Error CORS/red (p. ej. función aún no desplegada): fallback transparente a modo local
+        cloudUnavailableUntil = Date.now() + 3 * 60 * 1000;
+        return null;
+      }
+    }
+
+    async function pollCloudJobOnce() {
+      if (isPollingCloudJob || !navigator.onLine || !window.EfectivaCloud?.user || typeof window.EfectivaCloud.getCloudJob !== 'function') {
+        return false;
+      }
+      const localActive = loadActiveCloudJob();
+      isPollingCloudJob = true;
+      try {
+        const cloudJob = await window.EfectivaCloud.getCloudJob();
+        if (!cloudJob || !cloudJob.jobId) {
+          if (localActive && (Date.now() - (localActive.startedAt || 0) > 20000)) {
+            saveActiveCloudJob(null);
+            stopCloudJobPolling();
+            isProcessing = false;
+            sendBtn.disabled = false;
+            if (fab) fab.classList.remove('working');
+            hideTyping();
+          }
+          return false;
+        }
+
+        if (cloudJob.consumed || hasAppliedCloudJob(cloudJob.jobId)) {
+          if (localActive && localActive.jobId === cloudJob.jobId) {
+            saveActiveCloudJob(null);
+            stopCloudJobPolling();
+            isProcessing = false;
+            sendBtn.disabled = false;
+            if (fab) fab.classList.remove('working');
+            hideTyping();
+          }
+          return false;
+        }
+
+        const isOurJob = !localActive || localActive.jobId === cloudJob.jobId;
+        if (!isOurJob) return false;
+
+        if (cloudJob.status === 'running') {
+          const age = Date.now() - (cloudJob.updatedAt || cloudJob.startedAt || Date.now());
+          if (age > 175000) {
+            markAppliedCloudJob(cloudJob.jobId);
+            saveActiveCloudJob(null);
+            stopCloudJobPolling();
+            isProcessing = false;
+            sendBtn.disabled = false;
+            if (fab) fab.classList.remove('working');
+            hideTyping();
+            addErrorMsg('⏱️ La tarea en la nube superó el límite de tiempo (150s). Podés volver a enviarla.');
+            return true;
+          }
+          if (fab) fab.classList.add('working');
+          if (!document.getElementById('aiTyping')) showTyping();
+          stopCloudJobPolling();
+          if (!document.hidden) {
+            cloudPollTimer = setTimeout(pollCloudJobOnce, 2500);
+          }
+          return true;
+        }
+
+        if (cloudJob.status === 'done' || cloudJob.status === 'error') {
+          markAppliedCloudJob(cloudJob.jobId);
+          saveActiveCloudJob(null);
+          stopCloudJobPolling();
+
+          if (cloudJob.mutated && cloudJob.state && window.EfectivaStateBridge) {
+            window.EfectivaStateBridge.applyFullState(cloudJob.state);
+          }
+          if (Array.isArray(cloudJob.uiActions) && cloudJob.uiActions.length > 0) {
+            for (const act of cloudJob.uiActions) {
+              const fn = act && act.tool ? TOOL_EXECUTORS[act.tool] : null;
+              if (typeof fn === 'function') {
+                try { await fn(act.args || {}); } catch (_) {}
+              }
+            }
+          }
+
+          const targetChat = chats.find(c => c.id === cloudJob.chatId) || getCurrentChat();
+          if (targetChat) {
+            currentChatId = targetChat.id;
+            saveCurrentId();
+            await finalizeAgentResult(targetChat, {
+              text: cloudJob.text || (cloudJob.error ? ('❌ ' + cloudJob.error) : 'Listo.'),
+              tools: Array.isArray(cloudJob.tools) ? cloudJob.tools : []
+            });
+          } else {
+            hideTyping();
+          }
+
+          isProcessing = false;
+          sendBtn.disabled = false;
+          if (fab) fab.classList.remove('working');
+          if (panel.classList.contains('open')) input.focus();
+
+          if (typeof window.EfectivaCloud.clearCloudJob === 'function') {
+            window.EfectivaCloud.clearCloudJob(cloudJob.jobId).catch(() => {});
+          }
+          return true;
+        }
+        return false;
+      } catch (_) {
+        if (localActive && !document.hidden) {
+          stopCloudJobPolling();
+          cloudPollTimer = setTimeout(pollCloudJobOnce, 3500);
+        }
+        return false;
+      } finally {
+        isPollingCloudJob = false;
+      }
+    }
+
     async function resumePendingAiJobIfNeeded() {
-      if (isResumingPendingJob || document.hidden || !navigator.onLine) return;
+      if (document.hidden || !navigator.onLine) return;
+      // 1) Priorizar cualquier trabajo activo o terminado en Supabase Edge Function
+      const handledCloud = await pollCloudJobOnce();
+      if (handledCloud || loadActiveCloudJob()) return;
+
+      // 2) Fallback: reanudar trabajo local interrumpido si existiera
+      if (isResumingPendingJob) return;
       const job = loadPendingAiJob();
       if (!job) return;
       if (!job.interrupted && (Date.now() - (job.updatedAt || 0) < 4000)) return;
@@ -2943,6 +3178,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       if (!document.hidden) resumePendingAiJobIfNeeded();
     });
     window.addEventListener('online', () => resumePendingAiJobIfNeeded());
+    window.addEventListener('efectiva:authenticated', () => setTimeout(resumePendingAiJobIfNeeded, 800));
     setTimeout(resumePendingAiJobIfNeeded, 1200);
 
     // ---------- SEND ----------
@@ -2964,21 +3200,38 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       saveChats();
       renderHistory();
       showTyping();
+      let handedOffToCloud = false;
       try {
         const history = chat.messages
           .slice(0, -1)
           .filter(m => m.role === 'user' || m.role === 'assistant')
           .map(m => ({ role: m.role, content: m.content || '' }));
+
+        // Intentar primero Supabase Edge Function (ejecución real en la nube aunque salgas a WhatsApp)
+        if (canTryCloudAgent()) {
+          const dispatched = await dispatchCloudAgent(chat, text, history);
+          if (dispatched && dispatched.jobId) {
+            handedOffToCloud = true;
+            addToolMsg('☁️ Procesando en la nube (podés minimizar o ir a WhatsApp)...');
+            stopCloudJobPolling();
+            cloudPollTimer = setTimeout(pollCloudJobOnce, 2200);
+            return;
+          }
+        }
+
+        // Fallback automático a motor local si la Edge Function aún no está desplegada o sin sesión
         const result = await runAgent(text, history);
         await finalizeAgentResult(chat, result);
       } catch (err) {
         hideTyping();
         addErrorMsg('Error: ' + (err && err.message ? err.message : String(err)));
       } finally {
-        isProcessing = false;
-        sendBtn.disabled = false;
-        if (fab) fab.classList.remove('working');
-        if (panel.classList.contains('open')) input.focus();
+        if (!handedOffToCloud) {
+          isProcessing = false;
+          sendBtn.disabled = false;
+          if (fab) fab.classList.remove('working');
+          if (panel.classList.contains('open')) input.focus();
+        }
       }
     }
     async function runSkill(skill) {

@@ -114,6 +114,25 @@ async function initializeEfectiva() {
       folders = cloudData.folders;
       trash = cloudData.trash || [];
       localStorage.setItem('foldersDataV4', JSON.stringify({ folders, trash }));
+      if (Array.isArray(cloudData.notes) && (cloudData.notes.length > 0 || notes.length === 0)) {
+        notes = cloudData.notes;
+        saveNotes();
+      }
+      if (Array.isArray(cloudData.userTemplates) && (cloudData.userTemplates.length > 0 || userTemplates.length === 0)) {
+        userTemplates = cloudData.userTemplates;
+        saveUserTemplates();
+      }
+      if (Array.isArray(cloudData.automationRules) && (cloudData.automationRules.length > 0 || automationRules.length === 0)) {
+        automationRules = cloudData.automationRules;
+        saveAutomationRules();
+      }
+      if (Array.isArray(cloudData.agentMemory) && cloudData.agentMemory.length > 0) {
+        try { localStorage.setItem('efectivaAgentMemoryV1', JSON.stringify(cloudData.agentMemory)); } catch (_) {}
+      }
+      if (cloudData.userStats && typeof cloudData.userStats === 'object') {
+        userStats = Object.assign(userStats, cloudData.userStats);
+        saveUserStats();
+      }
     } else {
       window.EfectivaCloud.scheduleSave({ folders, trash });
     }
@@ -4770,3 +4789,90 @@ function exportScheduleToICS() {
   return true;
 }
 window.exportScheduleToICS = exportScheduleToICS;
+
+// ============================================================================
+//  PUENTE DE ESTADO PARA SUPABASE EDGE FUNCTION (AGENTE IA EN LA NUBE v26)
+// ============================================================================
+window.EfectivaStateBridge = {
+  exportFullState() {
+    let agentMemory = [];
+    try {
+      const raw = localStorage.getItem('efectivaAgentMemoryV1');
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) agentMemory = parsed;
+    } catch (_) {}
+
+    const nowObj = new Date();
+    const pad2 = n => String(n).padStart(2, '0');
+    const localNow = `${nowObj.getFullYear()}-${pad2(nowObj.getMonth() + 1)}-${pad2(nowObj.getDate())} ${pad2(nowObj.getHours())}:${pad2(nowObj.getMinutes())}:${pad2(nowObj.getSeconds())}`;
+    let timezone = 'local';
+    try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone; } catch (_) {}
+
+    const activePresentation = (typeof presentationOpen !== 'undefined' && presentationOpen && typeof currentPresentationTask !== 'undefined' && currentPresentationTask)
+      ? {
+          tarea_id: currentPresentationTask.id,
+          tarea_nombre: currentPresentationTask.name,
+          paso_actual_indice: (typeof currentStepIndex !== 'undefined') ? currentStepIndex : 0,
+          paso_actual_texto: (typeof presentationSteps !== 'undefined' && presentationSteps[currentStepIndex]) ? (presentationSteps[currentStepIndex].text || presentationSteps[currentStepIndex]) : '',
+          total_pasos: (typeof presentationSteps !== 'undefined') ? presentationSteps.length : 0,
+          segundos_restantes: currentPresentationTask.totalTime ? ((typeof currentStepCountdown !== 'undefined') ? currentStepCountdown : 0) : null,
+          en_negativo: !!(currentPresentationTask.totalTime && typeof currentStepCountdown !== 'undefined' && currentStepCountdown < 0),
+          alarma_sonando: (typeof stepAlarmActive !== 'undefined') ? !!stepAlarmActive : false,
+          retrasos_registrados: Array.isArray(currentPresentationTask.delayLogs) ? currentPresentationTask.delayLogs : []
+        }
+      : null;
+
+    return {
+      folders: Array.isArray(folders) ? folders : [],
+      trash: Array.isArray(trash) ? trash : [],
+      notes: Array.isArray(notes) ? notes : [],
+      userTemplates: Array.isArray(userTemplates) ? userTemplates : [],
+      automationRules: Array.isArray(automationRules) ? automationRules : [],
+      agentMemory,
+      userStats: userStats || { xp_total: 0, nivel: 1, racha_dias_consecutivos: 1 },
+      currentFolderId: (typeof currentFolderId !== 'undefined') ? currentFolderId : null,
+      activePresentation,
+      timezone,
+      localNow
+    };
+  },
+
+  applyFullState(nextState) {
+    if (!nextState || typeof nextState !== 'object') return;
+    if (Array.isArray(nextState.folders)) {
+      folders = nextState.folders;
+    }
+    if (Array.isArray(nextState.trash)) {
+      trash = nextState.trash;
+    }
+    try {
+      localStorage.setItem('foldersDataV4', JSON.stringify({ folders, trash }));
+    } catch (_) {}
+
+    if (Array.isArray(nextState.notes)) {
+      notes = nextState.notes;
+      saveNotes();
+    }
+    if (Array.isArray(nextState.userTemplates)) {
+      userTemplates = nextState.userTemplates;
+      saveUserTemplates();
+    }
+    if (Array.isArray(nextState.automationRules)) {
+      automationRules = nextState.automationRules;
+      saveAutomationRules();
+    }
+    if (Array.isArray(nextState.agentMemory)) {
+      try { localStorage.setItem('efectivaAgentMemoryV1', JSON.stringify(nextState.agentMemory)); } catch (_) {}
+    }
+    if (nextState.userStats && typeof nextState.userStats === 'object') {
+      userStats = Object.assign(userStats, nextState.userStats);
+      saveUserStats();
+    }
+
+    try { if (typeof renderFolders === 'function') renderFolders(); } catch (_) {}
+    try { if (typeof currentFolderId !== 'undefined' && currentFolderId && typeof renderTasks === 'function') renderTasks(); } catch (_) {}
+    try { if (typeof renderNotes === 'function') renderNotes(); } catch (_) {}
+    try { if (typeof renderUserTemplatesPanel === 'function') renderUserTemplatesPanel(); } catch (_) {}
+    try { if (typeof renderTrash === 'function') renderTrash(); } catch (_) {}
+  }
+};

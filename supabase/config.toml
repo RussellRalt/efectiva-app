@@ -1,0 +1,4 @@
+project_id = "uwxopjatesgptsrwyeqr"
+
+[functions.efectiva-agent]
+verify_jwt = false
