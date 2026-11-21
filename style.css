@@ -3627,3 +3627,41 @@ body.light-theme .pres-note-drawer {
   flex: 1 1 auto;
   width: 100%;
 }
+
+
+/* === FIX MINI-SCROLL TEXTOS LARGOS + BOTÓN REPLAY VOZ (V24) === */
+.presentation-step {
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+.presentation-step-inner {
+  margin: auto 0;
+  width: 100%;
+  text-align: center;
+  white-space: pre-wrap;
+}
+.presentation-step.has-scroll {
+  padding-top: 1.5rem;
+  padding-bottom: 1.8rem;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+.presentation-step.has-scroll .presentation-step-inner {
+  text-align: left;
+}
+.presentation-step.has-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.presentation-step.has-scroll::-webkit-scrollbar-thumb {
+  background: rgba(96, 165, 250, 0.55);
+  border-radius: 6px;
+}
+.replay-voice-btn {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #bae6fd;
+}
+.replay-voice-btn:active {
+  transform: scale(0.95);
+}

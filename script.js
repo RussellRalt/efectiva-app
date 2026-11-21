@@ -1789,7 +1789,9 @@ function hideGlobalSpeechBar() {
   if (pill) pill.style.display = 'none';
 }
 
+let speechSessionId = 0;
 function stopAllSpeechSynthesis() {
+  speechSessionId++;
   if (!('speechSynthesis' in window)) return;
   try {
     window.speechSynthesis.pause();
@@ -2514,7 +2516,7 @@ function updatePresentationUI() {
  * Click / Tap: si se pulsa a la derecha avanza, a la izquierda retrocede.
  */
 function handlePresentationClick(e) {
-  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer')) || e.target.closest('#presentationAudioCoachBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer')) || (e.target.closest('#presentationAudioCoachBtn') || e.target.closest('#presentationReplayVoiceBtn')) || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer'))) return;
   if (isPresentationMinimized || isPresentationTransitioning) return;
 
   // Si acaba de ocurrir un swipe, descartar el clic sintético que emite el navegador móvil
@@ -2537,8 +2539,10 @@ function handlePresentationClick(e) {
  * Deslizar hacia arriba (Swipe Up) -> Avanza al siguiente paso
  * Deslizar hacia abajo (Swipe Down) -> Regresa al paso anterior
  */
+let presentationTouchInScrollableCard = false;
+
 function handleTouchStart(e) {
-  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer')) || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer')) || (e.target.closest('#presentationAudioCoachBtn') || e.target.closest('#presentationReplayVoiceBtn')))) return;
   if (isPresentationMinimized || isPresentationTransitioning) return;
 
   if (e.touches && e.touches[0]) {
@@ -2547,6 +2551,10 @@ function handleTouchStart(e) {
     presentationTouchCurrentY = presentationTouchStartY;
     presentationTouchStartTime = Date.now();
     isPresentationDragging = false;
+    presentationTouchInScrollableCard = Boolean(
+      e.target && e.target.closest && e.target.closest('#presentationStep') &&
+      presentationStep && (presentationStep.scrollHeight > presentationStep.clientHeight + 4)
+    );
   }
 }
 
@@ -2558,6 +2566,16 @@ function handleTouchMove(e) {
   const currentY = e.touches[0].clientY;
   const dx = currentX - presentationTouchStartX;
   const dy = currentY - presentationTouchStartY;
+
+  // Si el texto es largo y tiene mini-scroll disponible en la dirección del dedo, dejar scrollear el texto
+  if (!isPresentationDragging && presentationTouchInScrollableCard && presentationStep) {
+    const atTop = presentationStep.scrollTop <= 4;
+    const atBottom = (presentationStep.scrollTop + presentationStep.clientHeight) >= (presentationStep.scrollHeight - 4);
+    if ((dy < 0 && !atBottom) || (dy > 0 && !atTop)) {
+      lastSwipeTime = Date.now(); // evita que al soltar tras scrollear se dispare un clic
+      return;
+    }
+  }
 
   // Detección de arrastre vertical dominante
   if (Math.abs(dy) > 7 && Math.abs(dy) > Math.abs(dx)) {
@@ -2579,7 +2597,7 @@ function handleTouchMove(e) {
 }
 
 function handleTouchEnd(e) {
-  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer')) || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer')) || (e.target.closest('#presentationAudioCoachBtn') || e.target.closest('#presentationReplayVoiceBtn')))) return;
   if (isPresentationMinimized) return;
 
   if (isPresentationDragging) {
@@ -2635,7 +2653,7 @@ let mouseStartTime = 0;
 
 function handleMouseDown(e) {
   if (e.button !== 0) return;
-  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer')) || e.target.closest('#presentationAudioCoachBtn'))) return;
+  if (e.target && e.target.closest && ((e.target.closest('#minimizePresentationBtn') || e.target.closest('#closePresentationBtn') || e.target.closest('#justifyDelayBtn') || e.target.closest('#delayJustifyBox') || e.target.closest('#silenceStepAlarmBtn') || e.target.closest('#presentationLinkedNoteBtn') || e.target.closest('#presentationLinkedNoteDrawer')) || (e.target.closest('#presentationAudioCoachBtn') || e.target.closest('#presentationReplayVoiceBtn')))) return;
   if (isPresentationMinimized || isPresentationTransitioning) return;
   mouseStartY = e.clientY;
   mouseStartX = e.clientX;
@@ -2817,67 +2835,149 @@ function retreatStepData() {
  */
 function fitPresentationText(el, text, opts) {
   opts = opts || {};
-  const minFontRem = opts.minFontRem || 0.85;
-  const maxHeightRatio = opts.maxHeightRatio || 0.52;
+  const minFontRem = opts.minFontRem || 0.98;
+  const maxHeightRatio = opts.maxHeightRatio || 0.56;
 
-  el.textContent = text;
+  // Usar un contenedor interno con margin: auto 0 para centrar textos cortos
+  // y permitir mini-scroll limpio desde el inicio en textos muy largos
+  el.innerHTML = '';
+  const inner = document.createElement('div');
+  inner.className = 'presentation-step-inner';
+  inner.textContent = text;
+  el.appendChild(inner);
+  el.scrollTop = 0;
+
   const len = (text || '').length;
 
   let fontRem;
   if (len < 30) {
-    fontRem = 2.4;
-  } else if (len < 70) {
-    fontRem = 1.8;
-  } else if (len < 160) {
-    fontRem = 1.35;
+    fontRem = 2.3;
+  } else if (len < 75) {
+    fontRem = 1.75;
+  } else if (len < 180) {
+    fontRem = 1.32;
   } else {
-    fontRem = 1.05;
+    fontRem = 1.08;
   }
 
   const viewportH = window.innerHeight || 800;
-  const maxH = Math.max(160, viewportH * maxHeightRatio);
+  const maxH = Math.max(200, viewportH * maxHeightRatio);
 
   el.style.fontSize = fontRem + 'rem';
-  el.style.lineHeight = len < 50 ? '1.3' : '1.45';
+  el.style.lineHeight = len < 50 ? '1.32' : '1.48';
   el.style.letterSpacing = len < 30 ? '0.02em' : 'normal';
   el.style.wordBreak = 'break-word';
   el.style.overflowWrap = 'break-word';
   el.style.maxHeight = maxH + 'px';
   el.style.overflowY = 'auto';
 
-  // Reducción iterativa hasta que no haya desbordamiento vertical
   let attempts = 0;
-  while (el.scrollHeight > maxH && fontRem > minFontRem && attempts < 25) {
+  while (el.scrollHeight > maxH && fontRem > minFontRem && attempts < 20) {
     fontRem = Math.max(minFontRem, Math.round((fontRem - 0.08) * 100) / 100);
     el.style.fontSize = fontRem + 'rem';
     attempts++;
   }
+
+  const needsScroll = el.scrollHeight > el.clientHeight + 4;
+  el.classList.toggle('has-scroll', needsScroll);
 
   return {
     finalFontRem: parseFloat(el.style.fontSize),
     chars: len,
     scrollHeight: el.scrollHeight,
     maxHeight: maxH,
-    fit: el.scrollHeight <= maxH
+    fit: !needsScroll
   };
 }
 
 let presentationAudioCoachEnabled = true;
 
-function speakPresentationStep(stepText) {
-  if (!presentationOpen || !presentationAudioCoachEnabled || !('speechSynthesis' in window)) return;
+function getCurrentPresentationStepText() {
+  const rawStep = presentationSteps[currentStepIndex];
+  return typeof rawStep === 'string'
+    ? rawStep
+    : (rawStep && typeof rawStep === 'object' ? String(rawStep.text || rawStep.texto || rawStep.descripcion || '') : '');
+}
+
+function splitTextForSpeech(text, maxLen = 190) {
+  const clean = String(text || '').replace(/[*_#`~>]/g, '').replace(/\s+/g, ' ').trim();
+  if (!clean) return [];
+  if (clean.length <= maxLen) return [clean];
+  const sentences = clean.split(/(?<=[.!?¡¿;:\n])\s+/);
+  const chunks = [];
+  let buf = '';
+  for (const s of sentences) {
+    if ((buf + ' ' + s).trim().length <= maxLen) {
+      buf = (buf + ' ' + s).trim();
+    } else {
+      if (buf) chunks.push(buf);
+      if (s.length <= maxLen) {
+        buf = s;
+      } else {
+        // Cortar frases muy largas sin puntuación por palabras
+        const words = s.split(' ');
+        let wBuf = '';
+        for (const w of words) {
+          if ((wBuf + ' ' + w).trim().length <= maxLen) {
+            wBuf = (wBuf + ' ' + w).trim();
+          } else {
+            if (wBuf) chunks.push(wBuf);
+            wBuf = w;
+          }
+        }
+        buf = wBuf;
+      }
+    }
+  }
+  if (buf) chunks.push(buf);
+  return chunks;
+}
+
+function speakPresentationStep(stepText, forceReplay = false) {
+  if (!presentationOpen || (!presentationAudioCoachEnabled && !forceReplay) || !('speechSynthesis' in window)) return;
   try {
     stopAllSpeechSynthesis();
-    const clean = (stepText || '').replace(/[*_#`~>]/g, '');
-    if (!clean.trim()) return;
-    const u = new SpeechSynthesisUtterance(`Paso ${currentStepIndex + 1}: ${clean}`);
-    u.lang = 'es-AR';
-    u.rate = 1.0;
-    u.onstart = () => { if (presentationOpen) showGlobalSpeechBar(); else stopAllSpeechSynthesis(); };
-    u.onend = () => hideGlobalSpeechBar();
-    u.onerror = () => hideGlobalSpeechBar();
-    window.speechSynthesis.speak(u);
+    const mySession = speechSessionId;
+    const chunks = splitTextForSpeech(`Paso ${currentStepIndex + 1}: ${stepText || ''}`, 190);
+    if (chunks.length === 0) return;
+
+    let idx = 0;
+    function speakNextChunk() {
+      if (mySession !== speechSessionId || !presentationOpen) {
+        hideGlobalSpeechBar();
+        return;
+      }
+      if (idx >= chunks.length) {
+        hideGlobalSpeechBar();
+        return;
+      }
+      const u = new SpeechSynthesisUtterance(chunks[idx]);
+      u.lang = 'es-AR';
+      u.rate = 1.0;
+      u.onstart = () => {
+        if (mySession === speechSessionId && presentationOpen) showGlobalSpeechBar();
+        else stopAllSpeechSynthesis();
+      };
+      u.onend = () => {
+        idx++;
+        speakNextChunk();
+      };
+      u.onerror = () => {
+        hideGlobalSpeechBar();
+      };
+      window.speechSynthesis.speak(u);
+    }
+    speakNextChunk();
   } catch(e) {}
+}
+
+const presentationReplayVoiceBtn = document.getElementById('presentationReplayVoiceBtn');
+if (presentationReplayVoiceBtn) {
+  presentationReplayVoiceBtn.onclick = (e) => {
+    e.stopPropagation();
+    const txt = getCurrentPresentationStepText();
+    if (txt) speakPresentationStep(txt, true);
+  };
 }
 
 const presentationAudioCoachBtn = document.getElementById('presentationAudioCoachBtn');
