@@ -3604,58 +3604,157 @@ body.light-theme .pres-note-drawer {
 }
 
 
-/* === FIX PRESENTACION V23 === */
+/* === BADGE DE VERSIÓN VISIBLE (V27) === */
+.app-version-pill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.16);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+/* === RECREACIÓN BLINDADA DE PRESENTACIÓN CON CSS GRID (V27) === */
 .presentation-modal {
-  z-index: 10020 !important;
+  z-index: 10050 !important;
+  height: 100dvh;
+  height: 100vh;
 }
 .presentation-modal.minimized {
   z-index: 10000 !important;
+  height: 170px !important;
+}
+.presentation-content {
+  width: 94%;
+  max-width: 660px;
+  height: 96dvh;
+  max-height: 96vh;
+  display: grid !important;
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto;
+  align-items: stretch !important;
+  justify-items: stretch;
+  gap: 8px;
+  padding: max(12px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom)) 10px !important;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 .presentation-header-bar {
-  flex-wrap: wrap;
-  row-gap: 6px;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin: 0 !important;
+  flex-wrap: nowrap;
 }
 .presentation-task-info {
-  min-width: 120px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
-.presentation-header-actions {
+.presentation-window-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.presentation-toolbar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+}
+.presentation-toolbar .audio-coach-btn,
+.presentation-window-actions .audio-coach-btn {
+  padding: 6px 11px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.presentation-progress-bar-container {
+  width: 100%;
+  margin: 2px 0 !important;
+}
+.presentation-meta-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.presentation-step-counter {
+  margin-bottom: 0 !important;
+}
+.presentation-scroll-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #7dd3fc;
+  background: rgba(14, 165, 233, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  padding: 3px 10px;
+  border-radius: 999px;
 }
 .presentation-card-wrapper {
-  min-height: 220px;
-  flex: 1 1 auto;
   width: 100%;
+  height: 100%;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
 }
-
-
-/* === FIX MINI-SCROLL TEXTOS LARGOS + BOTÓN REPLAY VOZ (V24) === */
 .presentation-step {
-  justify-content: flex-start !important;
-  align-items: stretch !important;
+  width: 100%;
+  min-height: 180px;
+  max-height: 100% !important;
+  height: auto;
+  display: flex !important;
+  flex-direction: column;
+  justify-content: center !important;
+  align-items: center !important;
+  padding: 1.6rem 1.35rem;
+  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+  box-sizing: border-box;
+  color: #f8fafc;
 }
 .presentation-step-inner {
-  margin: auto 0;
   width: 100%;
   text-align: center;
   white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
+/* Cuando el texto supera la caja: bloque puro (sin bugs Flexbox top-clipping en ningún WebView) */
 .presentation-step.has-scroll {
-  padding-top: 1.5rem;
-  padding-bottom: 1.8rem;
-  border-color: rgba(56, 189, 248, 0.35);
+  display: block !important;
+  height: 100% !important;
+  padding: 1.35rem 1.25rem 2rem 1.25rem;
+  border-color: rgba(56, 189, 248, 0.45);
+  box-shadow: 0 20px 44px -12px rgba(0, 0, 0, 0.7), inset 0 -18px 24px -16px rgba(56, 189, 248, 0.25);
 }
 .presentation-step.has-scroll .presentation-step-inner {
   text-align: left;
+  margin: 0;
 }
 .presentation-step.has-scroll::-webkit-scrollbar {
   width: 6px;
 }
 .presentation-step.has-scroll::-webkit-scrollbar-thumb {
-  background: rgba(96, 165, 250, 0.55);
+  background: rgba(96, 165, 250, 0.65);
   border-radius: 6px;
+}
+.presentation-bottom-bar {
+  width: 100%;
+  margin-top: 0 !important;
 }
 .replay-voice-btn {
   background: rgba(56, 189, 248, 0.16);
@@ -3664,6 +3763,33 @@ body.light-theme .pres-note-drawer {
 }
 .replay-voice-btn:active {
   transform: scale(0.95);
+}
+
+/* Modo Minimizado PiP limpio en Grid v27 */
+.presentation-modal.minimized .presentation-content {
+  display: flex !important;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 4px;
+  height: 100% !important;
+  max-height: 100% !important;
+  padding: 8px !important;
+}
+.presentation-modal.minimized .presentation-toolbar,
+.presentation-modal.minimized .presentation-meta-row,
+.presentation-modal.minimized .presentation-scroll-badge,
+.presentation-modal.minimized #presentationLinkedNoteDrawer {
+  display: none !important;
+}
+.presentation-modal.minimized .presentation-card-wrapper {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.presentation-modal.minimized .presentation-step {
+  min-height: 0;
+  height: auto !important;
+  max-height: 76px !important;
+  padding: 4px 6px !important;
 }
 
 

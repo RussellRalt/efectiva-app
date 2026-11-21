@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Efectiva" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=26" />
+  <link rel="stylesheet" href="style.css?v=27" />
   <link rel="manifest" href="manifest.json" />
   <!-- Librería ligera para captura de elementos en imagen PNG HD -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -18,7 +18,7 @@
   <!-- SECCIÓN CARPETAS -->
   <section id="foldersSection">
     <header>
-      <h1 class="app-brand"><span class="app-brand-mark">E</span><span>Efectiva</span></h1>
+      <h1 class="app-brand"><span class="app-brand-mark">E</span><span>Efectiva</span><span id="appVersionBadge" class="app-version-pill">v27</span></h1>
     </header>
 
     <!-- Contenedor de íconos (tema, importar, papelera) -->
@@ -127,7 +127,7 @@
     <div id="trashList" class="trash-list"></div>
   </section>
 
-  <!-- MODAL DE PRESENTACIÓN -->
+  <!-- MODAL DE PRESENTACIÓN (RECREACIÓN GRID BLINDADA v27) -->
   <div class="presentation-modal" id="presentationModal">
     <div class="presentation-content">
       <div class="presentation-header-bar">
@@ -135,20 +135,29 @@
           <span class="presentation-folder-tag" id="presentationFolderTag"></span>
           <h3 class="presentation-task-name" id="presentationTaskName"></h3>
         </div>
-        <div class="presentation-header-actions">
-          <button id="presentationLinkedNoteBtn" class="audio-coach-btn" style="display: none;" title="Ver nota vinculada a esta tarea">📝 Nota</button>
-          <button id="presentationReplayVoiceBtn" class="audio-coach-btn replay-voice-btn" type="button" title="Volver a escuchar este paso">🔁 Repetir</button>
-          <button id="presentationAudioCoachBtn" class="audio-coach-btn" title="Activar/Desactivar voz hablada Audio-Coach">📣 Voz ON</button>
+        <div class="presentation-window-actions">
+          <button id="minimizePresentationBtn" class="audio-coach-btn minimize-btn" type="button" title="Minimizar presentación">🗕 Minimizar</button>
+          <button id="closePresentationBtn" class="audio-coach-btn close-pres-btn" type="button" title="Cerrar presentación" aria-label="Cerrar">✖</button>
         </div>
       </div>
 
+      <div class="presentation-toolbar presentation-header-actions">
+        <button id="presentationLinkedNoteBtn" class="audio-coach-btn" type="button" style="display: none;" title="Ver nota vinculada a esta tarea">📝 Nota</button>
+        <button id="presentationReplayVoiceBtn" class="audio-coach-btn replay-voice-btn" type="button" title="Volver a escuchar este paso">🔁 Repetir</button>
+        <button id="presentationAudioCoachBtn" class="audio-coach-btn" type="button" title="Activar/Desactivar voz hablada Audio-Coach">📣 Voz ON</button>
+      </div>
+
       <div id="presentationLinkedNoteDrawer" class="pres-note-drawer" style="display: none;"></div>
+
       <!-- Barra de progreso segmentada estilo TikTok / Stories -->
       <div class="presentation-progress-bar-container" id="presentationProgressContainer"></div>
 
-      <div class="presentation-step-counter" id="presentationStepCounter">Paso 1 de 1</div>
+      <div class="presentation-meta-row">
+        <div class="presentation-step-counter" id="presentationStepCounter">Paso 1 de 1</div>
+        <div class="presentation-scroll-badge" id="presentationScrollBadge" style="display: none;">↕ Deslizá dentro para leer</div>
+      </div>
 
-      <!-- Contenedor del paso con soporte de arrastre vertical -->
+      <!-- Contenedor del paso con altura garantizada y mini-scroll para textos largos -->
       <div class="presentation-card-wrapper" id="presentationCardWrapper">
         <div class="presentation-step" id="presentationStep"></div>
       </div>
@@ -167,7 +176,7 @@
           </div>
         </div>
         <div class="presentation-swipe-hint" id="presentationSwipeHint">
-          <span class="hint-arrow">↕</span> Desliza o toca para navegar
+          <span class="hint-arrow">↕</span> Deslizá o tocá izq/der para navegar
         </div>
       </div>
     </div>
@@ -323,12 +332,12 @@
 
   <!-- Supabase: registro, inicio de sesión y sincronización segura -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="auth.js?v=26"></script>
+  <script src="auth.js?v=27"></script>
   <!-- Sistema de modales temáticos (DEBE cargarse antes que el resto) -->
-  <script src="modals.js?v=26"></script>
+  <script src="modals.js?v=27"></script>
   <!-- Script principal -->
-  <script src="script.js?v=26"></script>
-  <script src="ai_chat.js?v=26"></script>
+  <script src="script.js?v=27"></script>
+  <script src="ai_chat.js?v=27"></script>
   <script>
     if ('serviceWorker' in navigator) {
       let swReloading = false;

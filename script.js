@@ -2461,17 +2461,17 @@ function startPresentation(task, restoredState = null) {
   if ('Notification' in window && Notification.permission === 'default') {
     try { Notification.requestPermission(); } catch (e) {}
   }
+  stopAllSpeechSynthesis();
   presentationModal.style.display = 'flex';
-  showPresentationStep('none');
-  startTimer();
   addMinimizeButton();
   setupDelayJustificationUI();
   updateLinkedNoteInPresentation();
+  showPresentationStep('none');
+  startTimer();
   if (task.totalTime && currentStepCountdown > 0) scheduleNativeStepAlarm(currentStepCountdown, presentationSteps[currentStepIndex]);
   saveActivePresentationState();
 
   // Limpiar y registrar listeners de interacción (click y swipe vertical)
-  stopAllSpeechSynthesis();
   presentationModal.removeEventListener('click', handleFinalClick);
   presentationModal.removeEventListener('click', handlePresentationClick);
   presentationModal.removeEventListener('touchstart', handleTouchStart);
@@ -2857,12 +2857,11 @@ function fitPresentationText(el, text, opts) {
   const minFontRem = opts.minFontRem || 0.98;
   const maxHeightRatio = opts.maxHeightRatio || 0.56;
 
-  // Usar un contenedor interno con margin: auto 0 para centrar textos cortos
-  // y permitir mini-scroll limpio desde el inicio en textos muy largos
+  el.classList.remove('has-scroll');
   el.innerHTML = '';
   const inner = document.createElement('div');
   inner.className = 'presentation-step-inner';
-  inner.textContent = text;
+  inner.textContent = text || '';
   el.appendChild(inner);
   el.scrollTop = 0;
 
@@ -2870,20 +2869,24 @@ function fitPresentationText(el, text, opts) {
 
   let fontRem;
   if (len < 30) {
-    fontRem = 2.3;
+    fontRem = 2.2;
   } else if (len < 75) {
-    fontRem = 1.75;
+    fontRem = 1.68;
   } else if (len < 180) {
-    fontRem = 1.32;
-  } else {
+    fontRem = 1.28;
+  } else if (len < 420) {
     fontRem = 1.08;
+  } else {
+    fontRem = 1.0;
   }
 
+  const wrapper = document.getElementById('presentationCardWrapper');
   const viewportH = window.innerHeight || 800;
-  const maxH = Math.max(200, viewportH * maxHeightRatio);
+  const wrapperH = (wrapper && wrapper.clientHeight > 120) ? wrapper.clientHeight : Math.max(200, viewportH * maxHeightRatio);
+  const maxH = Math.max(180, wrapperH);
 
   el.style.fontSize = fontRem + 'rem';
-  el.style.lineHeight = len < 50 ? '1.32' : '1.48';
+  el.style.lineHeight = len < 50 ? '1.32' : '1.5';
   el.style.letterSpacing = len < 30 ? '0.02em' : 'normal';
   el.style.wordBreak = 'break-word';
   el.style.overflowWrap = 'break-word';
@@ -2891,14 +2894,33 @@ function fitPresentationText(el, text, opts) {
   el.style.overflowY = 'auto';
 
   let attempts = 0;
-  while (el.scrollHeight > maxH && fontRem > minFontRem && attempts < 20) {
+  while (el.scrollHeight > maxH && fontRem > minFontRem && attempts < 18) {
     fontRem = Math.max(minFontRem, Math.round((fontRem - 0.08) * 100) / 100);
     el.style.fontSize = fontRem + 'rem';
     attempts++;
   }
 
-  const needsScroll = el.scrollHeight > el.clientHeight + 4;
-  el.classList.toggle('has-scroll', needsScroll);
+  const syncScrollFlag = () => {
+    const curWrapperH = (wrapper && wrapper.clientHeight > 120) ? wrapper.clientHeight : maxH;
+    el.style.maxHeight = curWrapperH + 'px';
+    const needsScroll = el.scrollHeight > (el.clientHeight + 6);
+    el.classList.toggle('has-scroll', needsScroll);
+    if (el === presentationStep) {
+      const badge = document.getElementById('presentationScrollBadge');
+      if (badge) badge.style.display = needsScroll ? 'inline-flex' : 'none';
+    }
+    return needsScroll;
+  };
+
+  const needsScroll = syncScrollFlag();
+  // Re-medir tras el primer frame real de layout (clave al abrir modal desde display:none)
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      if (el.isConnected && el.firstElementChild === inner) {
+        syncScrollFlag();
+      }
+    });
+  }
 
   return {
     finalFontRem: parseFloat(el.style.fontSize),
@@ -3596,40 +3618,39 @@ function teardownMinimizedDrag() {
 }
 
 function addMinimizeButton() {
+  const windowActions = presentationModal.querySelector('.presentation-window-actions');
   const headerActions = presentationModal.querySelector('.presentation-header-actions');
-  const container = headerActions || presentationModal.querySelector('.presentation-content') || presentationModal;
+  const container = windowActions || headerActions || presentationModal.querySelector('.presentation-content') || presentationModal;
 
-  if (!document.getElementById('minimizePresentationBtn')) {
-    const btn = document.createElement('button');
+  let btn = document.getElementById('minimizePresentationBtn');
+  if (!btn) {
+    btn = document.createElement('button');
     btn.id = 'minimizePresentationBtn';
+    btn.type = 'button';
     btn.className = 'audio-coach-btn minimize-btn';
-    btn.textContent = isPresentationMinimized ? '🗖 Maximizar' : '🗕 Minimizar';
-
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      togglePresentationMinimized();
-      btn.textContent = isPresentationMinimized ? '🗖 Maximizar' : '🗕 Minimizar';
-    });
-
     container.appendChild(btn);
-    if (headerActions) btn.style.position = 'static';
   }
+  btn.textContent = isPresentationMinimized ? '🗖 Maximizar' : '🗕 Minimizar';
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    togglePresentationMinimized();
+    btn.textContent = isPresentationMinimized ? '🗖 Maximizar' : '🗕 Minimizar';
+  };
 
-  if (!document.getElementById('closePresentationBtn')) {
-    const closeBtn = document.createElement('button');
+  let closeBtn = document.getElementById('closePresentationBtn');
+  if (!closeBtn) {
+    closeBtn = document.createElement('button');
     closeBtn.id = 'closePresentationBtn';
+    closeBtn.type = 'button';
     closeBtn.className = 'audio-coach-btn close-pres-btn';
     closeBtn.title = 'Cerrar presentación';
     closeBtn.textContent = '✖';
-
-    closeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      closePresentation(true);
-    });
-
     container.appendChild(closeBtn);
-    if (headerActions) closeBtn.style.position = 'static';
   }
+  closeBtn.onclick = (e) => {
+    e.stopPropagation();
+    closePresentation(true);
+  };
 }
 
 /************************************************************************
@@ -3673,9 +3694,13 @@ function closePresentation(force = false) {
   presentationModal.style.right = '';
   presentationModal.style.transform = '';
   const minBtn = document.getElementById('minimizePresentationBtn');
-  if (minBtn) minBtn.remove();
-  const closeBtn = document.getElementById('closePresentationBtn');
-  if (closeBtn) closeBtn.remove();
+  if (minBtn) minBtn.textContent = '🗕 Minimizar';
+  const scrollBadge = document.getElementById('presentationScrollBadge');
+  if (scrollBadge) scrollBadge.style.display = 'none';
+  presentationStep.classList.remove('has-scroll');
+  presentationStep.style.transform = '';
+  presentationStep.style.opacity = '';
+  presentationStep.style.transition = '';
   // FIX: limpiar TODOS los listeners para que no queden colgados
   presentationModal.removeEventListener('click', handlePresentationClick);
   presentationModal.removeEventListener('click', handleFinalClick);
@@ -4232,74 +4257,7 @@ function restoreTask(button) {
   console.log('Tarea restaurada');
 }
 
-/*
- * Función para recalcular el tiempo asignado a cada paso
- * Se distribuye de forma equitativa: cada paso recibe (totalTime / número de pasos) segundos.
- */
-function recalcStepTimes(task) {
-  if (task.totalTime && task.steps.length > 0) {
-    const allocated = Math.floor(task.totalTime / task.steps.length);
-    task.stepTimes = [];
-    for (let i = 0; i < task.steps.length; i++) {
-      task.stepTimes.push(allocated);
-    }
-  }
-}
-
-// Reemplazar (o definir) la función handlePopState:
-function handlePopState(event) {
-  // Si la presentación está abierta en pantalla grande, al pulsar "atrás" solo se cierra la presentación.
-  if (presentationOpen && !isPresentationMinimized) {
-    closePresentation(true); // skipHistory true para que no invoque history.back()
-    return;
-  }
-  // Sino, proceder con la navegación normal
-  if (event.state) {
-    if (event.state.rewards) {
-      showFolders();
-    } else if (event.state.folderId) {
-      openFolder(event.state.folderId, false);
-    } else if (event.state.trash) {
-      showTrash(false);
-    }
-  } else {
-    showFolders();
-  }
-}
-
-// Modificar la función closePresentation para omitir history.back() en caso de cerrar presentación
-function closePresentation(skipHistory = false) {
-  // Si la presentación está minimizada, no se cierra (se mantiene en mini pantalla)
-  if (isPresentationMinimized) return;
-  
-  presentationModal.style.display = 'none';
-  presentationOpen = false;
-  clearInterval(timerInterval);
-  timerInterval = null;
-  timerSeconds = 0;
-  currentStepCountdown = 0;
-  timerDisplay.textContent = '00:00';
-  presentationStep.textContent = '';
-  if (isPresentationMinimized) {
-    presentationModal.classList.remove('minimized');
-    isPresentationMinimized = false;
-  }
-  const minBtn = document.getElementById('minimizePresentationBtn');
-  if (minBtn) minBtn.remove();
-  presentationModal.removeEventListener('click', handlePresentationClick);
-  presentationModal.removeEventListener('touchstart', handleTouchStart);
-  presentationModal.removeEventListener('touchend', handleTouchEnd);
-  if (currentPresentationTask) {
-    currentPresentationTask.currentStepIndex = currentStepIndex;
-  }
-  // Eliminar la llamada a history.back() para que no se abandone la carpeta
-  // if (!skipHistory && currentFolderId !== rewardsFolderId) { history.back(); } <-- ELIMINADA
-
-  saveDataToLocalStorage();
-  renderTasks();
-  currentPresentationTask = null;
-  releaseWakeLock();
-}
+// [Entropía cero v27: eliminados duplicados legados de recalcStepTimes, handlePopState y closePresentation que sobreescribían las versiones modernas arriba]
 
 // [Duplicates removed: nextStep and prevStep are unified above]
 
