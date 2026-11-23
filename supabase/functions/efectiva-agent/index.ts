@@ -1419,6 +1419,204 @@ function createToolEngine(
         return { ok: false, error: 'Error leyendo URL: ' + (e?.message || String(e)) };
       }
     },
+
+    // --- LAZY LOADING & NOTAS GRANULARES (v34+) ---
+    obtener_carpeta({ carpeta_id, incluir_completadas = false, incluir_pasos = false }: any = {}) {
+      const f = state.folders.find((x: any) => x.id === carpeta_id);
+      if (!f) return { ok: false, error: 'Carpeta no encontrada.' };
+      const mapT = (t: any) => ({
+        id: t.id, nombre: t.name, prioridad: t.priority || null,
+        fecha_vencimiento: t.dueDate || null, etiquetas: t.tags || [],
+        tiempo_minutos: t.totalTime ? Math.round((t.totalTime / 60) * 100) / 100 : null,
+        cantidad_pasos: (t.steps || []).length,
+        ...(incluir_pasos ? { pasos: (t.steps || []).map((s: any, i: number) => ({ i, texto: s, min: t.stepTimes?.[i] ? Math.round((t.stepTimes[i] / 60) * 100) / 100 : null })) } : {})
+      });
+      return {
+        ok: true, id: f.id, nombre: f.name,
+        pendientes: (f.tasks || []).map(mapT),
+        ...(incluir_completadas ? { finalizadas: (f.finished || []).map(mapT) } : { total_finalizadas: (f.finished || []).length })
+      };
+    },
+    obtener_tarea({ tarea_id }: any = {}) {
+      for (const f of state.folders) {
+        for (const listName of ['tasks', 'finished']) {
+          const t = (f[listName] || []).find((x: any) => x.id === tarea_id);
+          if (t) {
+            return {
+              ok: true, carpeta_id: f.id, carpeta_nombre: f.name, finalizada: listName === 'finished',
+              id: t.id, nombre: t.name, prioridad: t.priority || null, color: t.color || null,
+              fecha_vencimiento: t.dueDate || null, etiquetas: t.tags || [],
+              tiempo_minutos: t.totalTime ? Math.round((t.totalTime / 60) * 100) / 100 : null,
+              pasos: (t.steps || []).map((s: any, i: number) => ({ i, texto: s, min: t.stepTimes?.[i] ? Math.round((t.stepTimes[i] / 60) * 100) / 100 : null })),
+              delayLogs: t.delayLogs || []
+            };
+          }
+        }
+      }
+      return { ok: false, error: 'Tarea no encontrada.' };
+    },
+    leer_nota({ nota_id, titulo, max_chars = 6000 }: any = {}) {
+      const n = nota_id
+        ? state.notes.find((x: any) => x.id === nota_id)
+        : state.notes.find((x: any) => String(x.title || '').toLowerCase().includes(String(titulo || '').toLowerCase()));
+      if (!n) return { ok: false, error: 'Nota no encontrada.' };
+      const c = String(n.content || '');
+      return { ok: true, id: n.id, titulo: n.title, carpeta_id: n.folderId || null, etiquetas: n.tags || [], contenido: c.slice(0, max_chars), truncado: c.length > max_chars };
+    },
+    parchear_nota({ nota_id, operacion = 'append', texto = '', encabezado }: any = {}) {
+      const n = state.notes.find((x: any) => x.id === nota_id);
+      if (!n) return { ok: false, error: 'Nota no encontrada.' };
+      const cur = String(n.content || '');
+      if (operacion === 'prepend') n.content = String(texto) + (cur ? '\n' + cur : '');
+      else if (operacion === 'reemplazar_seccion' && encabezado) {
+        const re = new RegExp(`(^|\\n)(${String(encabezado).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?)(?=\\n#+\\s|$)`, 'i');
+        n.content = re.test(cur) ? cur.replace(re, `$1${encabezado}\n${texto}`) : (cur + `\n\n${encabezado}\n${texto}`);
+      } else {
+        n.content = cur + (cur ? '\n' : '') + String(texto);
+      }
+      n.updatedAt = Date.now();
+      mutated = true;
+      return { ok: true, id: n.id, chars: n.content.length };
+    },
+
+    // --- MEMORIA POR NODOS Y GRADOS (v34+) ---
+    cargar_nodo_memoria({ nodo, grado_maximo = 1 }: any = {}) {
+      const k = String(nodo || '').toLowerCase();
+      const items = (state.agentMemory || []).filter((m: any) => {
+        const g = Number(m.grado ?? 1);
+        const mn = String(m.nodo || m.categoria || 'general').toLowerCase();
+        return g <= Number(grado_maximo) && (!k || mn === k || mn.includes(k));
+      });
+      return { ok: true, nodo: k, total: items.length, registros: items };
+    },
+    buscar_memoria_relevante({ query = '', limite = 12 }: any = {}) {
+      const q = String(query || '').toLowerCase().trim();
+      const hits = (state.agentMemory || []).filter((m: any) =>
+        !q || JSON.stringify(m).toLowerCase().includes(q)
+      ).slice(0, Number(limite) || 12);
+      return { ok: true, total: hits.length, registros: hits };
+    },
+
+    // --- TABLAS GENÉRICAS LAZY LOADING (v36+) ---
+    listar_tablas({ carpeta_id = null, incluir_filas = false }: any = {}) {
+      const list = (state.tables || []).filter((t: any) => !carpeta_id || t.folderId === carpeta_id);
+      return {
+        ok: true, total: list.length,
+        tablas: list.map((t: any) => ({
+          id: t.id, title: t.title, folderId: t.folderId || null, columns: t.columns || [],
+          rowCount: (t.rows || []).length, updatedAt: t.updatedAt || null,
+          ...(incluir_filas ? { rows: t.rows || [] } : {})
+        }))
+      };
+    },
+    leer_tabla({ tabla_id, offset = 0, limit = 50, filtro = null }: any = {}) {
+      const tbl = (state.tables || []).find((t: any) => t.id === tabla_id);
+      if (!tbl) return { ok: false, error: 'Tabla no encontrada.' };
+      let rows = tbl.rows || [];
+      if (filtro) {
+        const q = String(filtro).toLowerCase();
+        rows = rows.filter((r: any) => Object.values(r.cells || {}).some((v: any) => String(v ?? '').toLowerCase().includes(q)));
+      }
+      const slice = rows.slice(Number(offset) || 0, (Number(offset) || 0) + (Number(limit) || 50));
+      return { ok: true, id: tbl.id, title: tbl.title, columns: tbl.columns || [], total_filas: rows.length, rows: slice };
+    },
+    gestionar_tabla(args: any = {}) {
+      if (!Array.isArray(state.tables)) state.tables = [];
+      const accion = String(args.accion || 'crear').toLowerCase();
+      if (accion === 'crear') {
+        const cols = (Array.isArray(args.columnas || args.columns) ? (args.columnas || args.columns) : [{ name: 'Item', type: 'text' }])
+          .map((c: any, i: number) => ({ id: c.id || ('col_' + (i + 1)), name: String(c.name || ('Col ' + (i + 1))), type: c.type || 'text', ...(c.options ? { options: c.options } : {}) }));
+        const tbl = { id: '_tbl_' + Math.random().toString(36).slice(2, 9), title: String(args.titulo || args.title || 'Nueva Tabla'), folderId: args.carpeta_id || args.folderId || null, columns: cols, rows: [], updatedAt: Date.now() };
+        state.tables.unshift(tbl);
+        mutated = true;
+        return { ok: true, tabla: { id: tbl.id, title: tbl.title, columns: tbl.columns, rowCount: 0 } };
+      }
+      const idx = state.tables.findIndex((t: any) => t.id === (args.tabla_id || args.id));
+      if (idx === -1) return { ok: false, error: 'Tabla no encontrada.' };
+      if (accion === 'eliminar') {
+        state.tables.splice(idx, 1);
+        mutated = true;
+        return { ok: true, eliminada: args.tabla_id || args.id };
+      }
+      const tbl = state.tables[idx];
+      if (args.titulo || args.title) tbl.title = String(args.titulo || args.title);
+      if (Array.isArray(args.columnas || args.columns)) tbl.columns = args.columnas || args.columns;
+      tbl.updatedAt = Date.now();
+      mutated = true;
+      return { ok: true, tabla: { id: tbl.id, title: tbl.title, columns: tbl.columns, rowCount: (tbl.rows || []).length } };
+    },
+    parchear_filas_tabla({ tabla_id, operaciones = [] }: any = {}) {
+      const tbl = (state.tables || []).find((t: any) => t.id === tabla_id);
+      if (!tbl) return { ok: false, error: 'Tabla no encontrada.' };
+      if (!Array.isArray(tbl.rows)) tbl.rows = [];
+      for (const op of (operaciones || [])) {
+        const act = String(op.accion || 'agregar').toLowerCase();
+        if (act === 'agregar') {
+          const cells: Record<string, any> = {};
+          for (const col of (tbl.columns || [])) {
+            if (op.datos?.[col.id] !== undefined) cells[col.id] = op.datos[col.id];
+            else if (op.datos?.[col.name] !== undefined) cells[col.id] = op.datos[col.name];
+          }
+          tbl.rows.push({ id: '_row_' + Math.random().toString(36).slice(2, 9), cells });
+        } else if (act === 'actualizar') {
+          const row = tbl.rows.find((r: any) => r.id === op.fila_id);
+          if (row) {
+            for (const col of (tbl.columns || [])) {
+              if (op.datos?.[col.id] !== undefined) row.cells[col.id] = op.datos[col.id];
+              else if (op.datos?.[col.name] !== undefined) row.cells[col.id] = op.datos[col.name];
+            }
+          }
+        } else if (act === 'eliminar') {
+          const ri = tbl.rows.findIndex((r: any) => r.id === op.fila_id);
+          if (ri !== -1) tbl.rows.splice(ri, 1);
+        }
+      }
+      tbl.updatedAt = Date.now();
+      mutated = true;
+      return { ok: true, total_filas: tbl.rows.length };
+    },
+
+    // --- MOTOR FINANCIERO ESTRUCTURADO EN LA NUBE (GTQ / USD EN CENTAVOS) ---
+    fin_obtener_resumen() {
+      const f = state.finance || { cuentas: [], movimientos: [], compromisos: [], inversiones: [], tipo_cambio_usd_gtq: 7.75 };
+      const toVal = (c: number) => Math.round((Number(c) || 0)) / 100;
+      const sumCents = (arr: any[]) => arr.reduce((a, x) => a + (Number(x.saldo_centavos) || 0), 0);
+      const cuentas = f.cuentas || [];
+      return {
+        ok: true,
+        liquidez_gtq: toVal(sumCents(cuentas.filter((c: any) => c.moneda === 'GTQ'))),
+        liquidez_usd: toVal(sumCents(cuentas.filter((c: any) => c.moneda === 'USD'))),
+        cuentas: cuentas.map((c: any) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo, moneda: c.moneda, saldo: toVal(c.saldo_centavos) })),
+        compromisos_activos: (f.compromisos || []).filter((d: any) => d.estado !== 'saldado').length,
+        inversiones_activas: (f.inversiones || []).length,
+        movimientos_totales: (f.movimientos || []).length
+      };
+    },
+    fin_registrar_movimiento(args: any = {}) {
+      if (!state.finance) state.finance = { version: 1, tipo_cambio_usd_gtq: 7.75, cuentas: [], movimientos: [], compromisos: [], inversiones: [] };
+      const f = state.finance;
+      const cents = Math.round((Number(args.monto) || 0) * 100);
+      if (cents <= 0) return { ok: false, error: 'Monto inválido.' };
+      const tipo = String(args.tipo || 'egreso').toLowerCase();
+      const origen = (f.cuentas || []).find((c: any) => c.id === args.cuenta_origen_id || c.nombre === args.cuenta_origen_id);
+      const destino = (f.cuentas || []).find((c: any) => c.id === args.cuenta_destino_id || c.nombre === args.cuenta_destino_id);
+      if (tipo === 'ingreso' && destino) destino.saldo_centavos = (destino.saldo_centavos || 0) + cents;
+      else if (tipo === 'egreso' && origen) origen.saldo_centavos = (origen.saldo_centavos || 0) - cents;
+      else if (tipo === 'transferencia' && origen && destino) {
+        origen.saldo_centavos = (origen.saldo_centavos || 0) - cents;
+        destino.saldo_centavos = (destino.saldo_centavos || 0) + cents;
+      }
+      const mov = {
+        id: 'mov_' + Math.random().toString(36).slice(2, 9),
+        fecha: args.fecha || new Date().toISOString().slice(0, 10),
+        tipo, moneda: args.moneda || (origen?.moneda || destino?.moneda || 'GTQ'),
+        monto_centavos: cents, cuenta_origen_id: origen?.id || null, cuenta_destino_id: destino?.id || null,
+        categoria: args.categoria || 'General', descripcion: args.descripcion || ''
+      };
+      f.movimientos.unshift(mov);
+      mutated = true;
+      return { ok: true, movimiento: mov };
+    },
   };
 
   // Herramientas puramente de interfaz/reproducción en vivo: se encolan para ejecutar al volver a la app

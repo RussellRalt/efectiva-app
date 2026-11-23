@@ -254,6 +254,39 @@
     } catch (_) {}
   }
 
+  let realtimeJobChannel = null;
+  function subscribeCloudJob(onUpdate) {
+    if (!currentUser || !client || typeof client.channel !== 'function') return null;
+    try {
+      if (realtimeJobChannel) {
+        client.removeChannel(realtimeJobChannel);
+        realtimeJobChannel = null;
+      }
+      realtimeJobChannel = client
+        .channel('efectiva-cloud-job-' + currentUser.id)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'user_data',
+            filter: 'user_id=eq.' + currentUser.id
+          },
+          (payload) => {
+            const job = payload?.new?.data?.aiCloudJob;
+            if (job && (job.status === 'done' || job.status === 'error')) {
+              if (typeof onUpdate === 'function') onUpdate(job);
+              window.dispatchEvent(new CustomEvent('efectiva:cloud-job-update', { detail: job }));
+            }
+          }
+        )
+        .subscribe();
+      return realtimeJobChannel;
+    } catch (_) {
+      return null;
+    }
+  }
+
   window.EfectivaCloud = {
     supabaseUrl: SUPABASE_URL,
     supabaseKey: SUPABASE_KEY,
@@ -262,6 +295,7 @@
     flushNow,
     getCloudJob,
     clearCloudJob,
+    subscribeCloudJob,
     loadData,
     scheduleSave,
     loadAIChats,

@@ -6,6 +6,7 @@ import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     private EfectivaAndroidTtsBridge nativeTtsBridge = null;
+    private EfectivaBgBridge bgBridge = null;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -19,6 +20,10 @@ public class MainActivity extends BridgeActivity {
         if (wv != null && nativeTtsBridge == null) {
             nativeTtsBridge = new EfectivaAndroidTtsBridge(getApplicationContext(), wv);
             wv.addJavascriptInterface(nativeTtsBridge, "EfectivaAndroidBridge");
+        }
+        if (wv != null && bgBridge == null) {
+            bgBridge = new EfectivaBgBridge(getApplicationContext());
+            wv.addJavascriptInterface(bgBridge, "EfectivaBgBridge");
         }
         super.load();
     }

@@ -3743,7 +3743,30 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
       if (!document.hidden) resumePendingAiJobIfNeeded();
     });
     window.addEventListener('online', () => resumePendingAiJobIfNeeded());
-    window.addEventListener('efectiva:authenticated', () => setTimeout(resumePendingAiJobIfNeeded, 800));
+    window.addEventListener('efectiva:cloud-job-update', () => {
+      pollCloudJobOnce();
+    });
+    window.addEventListener('efectiva:authenticated', () => {
+      if (window.EfectivaCloud && typeof window.EfectivaCloud.subscribeCloudJob === 'function') {
+        window.EfectivaCloud.subscribeCloudJob();
+      }
+      setTimeout(resumePendingAiJobIfNeeded, 800);
+    });
+    if (window.EfectivaCloud?.user && typeof window.EfectivaCloud.subscribeCloudJob === 'function') {
+      window.EfectivaCloud.subscribeCloudJob();
+    }
+    // Listener nativo de Capacitor 6 (más confiable que visibilitychange al volver desde WhatsApp/Telegram)
+    try {
+      const CapAppBg = window.Capacitor?.Plugins?.App;
+      if (CapAppBg && typeof CapAppBg.addListener === 'function' && !window.__efectivaAiAppStateBound) {
+        window.__efectivaAiAppStateBound = true;
+        CapAppBg.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) {
+            setTimeout(resumePendingAiJobIfNeeded, 250);
+          }
+        });
+      }
+    } catch (_) {}
     setTimeout(resumePendingAiJobIfNeeded, 1200);
 
     // ---------- SEND ----------
@@ -3785,12 +3808,15 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
         }
 
         // Fallback automático a motor local si la Edge Function aún no está desplegada o sin sesión
+        // Si corre en APK nativa con Foreground Service, mantener vivo el proceso en segundo plano
+        try { window.EfectivaBgBridge?.start('Copiloto IA trabajando...'); } catch (_) {}
         const result = await runAgent(text, history);
         await finalizeAgentResult(chat, result);
       } catch (err) {
         hideTyping();
         addErrorMsg('Error: ' + (err && err.message ? err.message : String(err)));
       } finally {
+        try { window.EfectivaBgBridge?.stop(); } catch (_) {}
         if (!handedOffToCloud) {
           isProcessing = false;
           sendBtn.disabled = false;
