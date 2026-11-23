@@ -1233,7 +1233,12 @@ function createToolEngine(
       const proximos = (state.automationRules || [])
         .filter((r) => r.activa !== false && r.evento === 'hora_programada' && r.condicion?.hora)
         .slice(0, 5)
-        .map((r) => ({ hora: r.condicion.hora, accion: r.accion_automatica, nombre: r.parametros_accion?.nombre || r.parametros_accion?.tarea_id || '' }));
+        .map((r) => {
+          const tid = r.parametros_accion?.tarea_id || null;
+          const resolved = tid ? findTask(tid) : null;
+          const nombre = r.parametros_accion?.nombre || resolved?.task?.name || tid || '';
+          return tid ? { hora: r.condicion.hora, accion: r.accion_automatica, tarea_id: tid, nombre } : { hora: r.condicion.hora, accion: r.accion_automatica, nombre };
+        });
       return {
         ok: true,
         ahora_local: state.localNow,

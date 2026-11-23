@@ -2205,12 +2205,15 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
         .filter(r => r.activa !== false && r.evento === 'hora_programada' && r.condicion && r.condicion.hora)
         .map(r => {
           const [h, m] = String(r.condicion.hora).split(':').map(Number);
-          return { hora: r.condicion.hora, mins: (h * 60 + m), accion: r.accion_automatica, nombre: r.parametros_accion?.nombre || r.parametros_accion?.tarea_id || '' };
+          const tid = r.parametros_accion?.tarea_id || null;
+          const resolvedTask = tid ? findTask(tid) : null;
+          const nombre = r.parametros_accion?.nombre || (resolvedTask && resolvedTask.task ? resolvedTask.task.name : '') || tid || '';
+          return { hora: r.condicion.hora, mins: (h * 60 + m), accion: r.accion_automatica, tarea_id: tid, nombre };
         })
         .filter(x => !isNaN(x.mins) && x.mins >= nowMin)
         .sort((a, b) => a.mins - b.mins)
         .slice(0, 3)
-        .map(({ hora, accion, nombre }) => ({ hora, accion, nombre }));
+        .map(({ hora, accion, tarea_id, nombre }) => (tarea_id ? { hora, accion, tarea_id, nombre } : { hora, accion, nombre }));
 
       return { ok: true, ahora_local: ahoraLocal, zona_horaria: tz, presentacion_activa: pres, proximos_bloques: proximos };
     },
