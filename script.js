@@ -298,6 +298,12 @@ function handleAppBackAction() {
     if (aiClose) aiClose.click();
     return true;
   }
+  const colorPickerEl = document.getElementById('taskColorPicker');
+  if (colorPickerEl) {
+    if (typeof closeColorPicker === 'function') closeColorPicker();
+    else colorPickerEl.remove();
+    return true;
+  }
   const finActionModal = document.getElementById('finActionModal');
   if (finActionModal) {
     finActionModal.remove();
@@ -887,11 +893,8 @@ function buildNoteItem(note) {
   noteDiv.className = 'task note-item';
   noteDiv.dataset.noteId = note.id;
 
-  if (note.color) {
-    noteDiv.style.backgroundColor = note.color;
-    if (typeof darkenColor === 'function') {
-      noteDiv.style.borderColor = darkenColor(note.color, 0.3);
-    }
+  if (note.color && typeof applyCardColorTheme === 'function') {
+    applyCardColorTheme(noteDiv, note.color);
   }
 
   const noteHeader = document.createElement('div');
@@ -905,25 +908,22 @@ function buildNoteItem(note) {
   const noteButtons = document.createElement('div');
   noteButtons.className = 'task-buttons note-buttons';
 
-  // Botón Paleta 🎨
+  // Botón Paleta 🎨 (conectado al motor unificado de popover portal + paleta pastel)
   const colorBtn = document.createElement('button');
+  colorBtn.type = 'button';
   colorBtn.textContent = '🎨';
   colorBtn.title = 'Cambiar color de la nota';
   colorBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (typeof openColorPicker === 'function') {
-      openColorPicker(colorBtn, note.color, (newColor) => {
+    openColorPicker(colorBtn, note.color || null, (newColor) => {
+      if (newColor === null) {
+        delete note.color;
+      } else {
         note.color = newColor;
-        saveNotes();
-        renderTasks();
-      });
-    } else {
-      const palette = ['#4CAF50', '#4285F4', '#FF5252', '#FF9800', '#9C27B0', '#607D8B'];
-      const nextColor = palette[(palette.indexOf(note.color) + 1) % palette.length];
-      note.color = nextColor;
+      }
       saveNotes();
       renderTasks();
-    }
+    });
   });
 
   // Botón Captura 📸
@@ -1229,115 +1229,294 @@ function renameTask(task) {
 }
 
 /**
- * v2.7.0 — Paleta de colores y selección de color para tareas.
+ * v37 — Sistema de Paleta Pastel Curada + Popover Portal Flotante + Armonización Integral por Tarjeta.
  *
- * Paleta de 8 colores + opción "sin color":
- *   🔴 rojo       #FF5252
- *   🟠 naranja    #FF9800
- *   🟡 amarillo   #FFEB3B
- *   🟢 verde      #4CAF50
- *   🔵 cian       #00BCD4
- *   🟣 violeta    #9C27B0
- *   🩷 rosa       #E91E63
- *   🟤 ámbar      #FFA000
- *   ⚪ sin color  (volver al default)
+ * 8 tonos pastel desaturados y estéticos + "Sin color":
+ *   mint     (#A7E3C6) Menta suave
+ *   lavender (#C9B8F5) Lavanda
+ *   peach    (#F7C5A8) Durazno
+ *   sky      (#A8D4F5) Cielo pastel
+ *   rose     (#F2B8C6) Rosa empolvado
+ *   sand     (#EDE0B4) Arena cálida
+ *   sage     (#B8D4B8) Salvia
+ *   slate    (#B4C6DC) Azul pizarra suave
  */
-const TASK_COLOR_PALETTE = [
-  '#FF5252', // rojo
-  '#FF9800', // naranja
-  '#FFEB3B', // amarillo
-  '#4CAF50', // verde
-  '#00BCD4', // cian
-  '#9C27B0', // violeta
-  '#E91E63', // rosa
-  '#FFA000', // ámbar
-  null       // sin color (quitar)
+const PASTEL_COLOR_PRESETS = [
+  { key: 'mint',     hex: '#A7E3C6', name: 'Menta suave' },
+  { key: 'lavender', hex: '#C9B8F5', name: 'Lavanda' },
+  { key: 'peach',    hex: '#F7C5A8', name: 'Durazno' },
+  { key: 'sky',      hex: '#A8D4F5', name: 'Cielo pastel' },
+  { key: 'rose',     hex: '#F2B8C6', name: 'Rosa empolvado' },
+  { key: 'sand',     hex: '#EDE0B4', name: 'Arena cálida' },
+  { key: 'sage',     hex: '#B8D4B8', name: 'Salvia' },
+  { key: 'slate',    hex: '#B4C6DC', name: 'Azul pizarra' }
 ];
 
+const TASK_COLOR_PALETTE = [...PASTEL_COLOR_PRESETS.map(p => p.hex), null];
+
+// Mapeo automático de colores antiguos saturados hacia su equivalente pastel suave
+const LEGACY_COLOR_TO_PASTEL = {
+  '#4caf50': 'mint',
+  '#22c55e': 'mint',
+  '#10b981': 'mint',
+  '#9c27b0': 'lavender',
+  '#a78bfa': 'lavender',
+  '#7c3aed': 'lavender',
+  '#ff9800': 'peach',
+  '#f97316': 'peach',
+  '#00bcd4': 'sky',
+  '#4285f4': 'sky',
+  '#38bdf8': 'sky',
+  '#2563eb': 'sky',
+  '#ff5252': 'rose',
+  '#e91e63': 'rose',
+  '#ef4444': 'rose',
+  '#ffeb3b': 'sand',
+  '#ffa000': 'sand',
+  '#fbbf24': 'sand',
+  '#607d8b': 'slate',
+  '#64748b': 'slate'
+};
+
+function hexToRgb(hex) {
+  if (!hex || typeof hex !== 'string') return null;
+  let clean = hex.trim().replace('#', '');
+  if (clean.length === 3) clean = clean.split('').map(c => c + c).join('');
+  if (!/^[0-9a-fA-F]{6}$/.test(clean)) return null;
+  return {
+    r: parseInt(clean.substring(0, 2), 16),
+    g: parseInt(clean.substring(2, 4), 16),
+    b: parseInt(clean.substring(4, 6), 16)
+  };
+}
+
 /**
- * Oscurece un color hex en un porcentaje (0-1). Usado para bordes
- * que combinen con el color de fondo.
+ * Resuelve cualquier color (pastel nuevo o hex legado) a uno de los 8 presets pastel.
+ */
+function resolvePastelPreset(color) {
+  if (!color || typeof color !== 'string') return null;
+  const lower = color.trim().toLowerCase();
+  const byKey = PASTEL_COLOR_PRESETS.find(p => p.key === lower || p.hex.toLowerCase() === lower);
+  if (byKey) return byKey;
+
+  const legacyKey = LEGACY_COLOR_TO_PASTEL[lower];
+  if (legacyKey) {
+    return PASTEL_COLOR_PRESETS.find(p => p.key === legacyKey) || PASTEL_COLOR_PRESETS[0];
+  }
+
+  // Fallback por distancia euclidiana RGB al tono pastel más cercano
+  const rgb = hexToRgb(lower);
+  if (!rgb) return PASTEL_COLOR_PRESETS[0];
+  let best = PASTEL_COLOR_PRESETS[0];
+  let bestDist = Infinity;
+  PASTEL_COLOR_PRESETS.forEach(p => {
+    const pr = hexToRgb(p.hex);
+    if (!pr) return;
+    const d = (rgb.r - pr.r) ** 2 + (rgb.g - pr.g) ** 2 + (rgb.b - pr.b) ** 2;
+    if (d < bestDist) {
+      bestDist = d;
+      best = p;
+    }
+  });
+  return best;
+}
+
+function normalizePastelColor(color) {
+  if (!color) return null;
+  const preset = resolvePastelPreset(color);
+  return preset ? preset.hex : null;
+}
+
+/**
+ * Oscurece un color hex en un porcentaje (0-1). Se mantiene por compatibilidad.
  */
 function darkenColor(hex, amount) {
-  if (!hex || typeof hex !== 'string') return '#555';
-  hex = hex.replace('#', '');
-  if (hex.length === 3) {
-    hex = hex.split('').map(c => c + c).join('');
-  }
-  const r = parseInt(hex.substring(0, 2), 16);
-  const g = parseInt(hex.substring(2, 4), 16);
-  const b = parseInt(hex.substring(4, 6), 16);
-  const dr = Math.max(0, Math.floor(r * (1 - amount)));
-  const dg = Math.max(0, Math.floor(g * (1 - amount)));
-  const db = Math.max(0, Math.floor(b * (1 - amount)));
+  const rgb = hexToRgb(hex);
+  if (!rgb) return '#555555';
+  const dr = Math.max(0, Math.floor(rgb.r * (1 - amount)));
+  const dg = Math.max(0, Math.floor(rgb.g * (1 - amount)));
+  const db = Math.max(0, Math.floor(rgb.b * (1 - amount)));
   return '#' + [dr, dg, db].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 
 /**
- * Abre un popover con la paleta de colores al lado del botón 🎨.
- * Al elegir un color (o "sin color"), se aplica a la tarea y se persiste.
+ * Aplica la armonización integral por tokens CSS a una tarjeta de Tarea o Nota.
+ * Los matices se adaptan automáticamente a Dark, Light y Cyberpunk mediante CSS.
  */
-function openColorPicker(task, anchorBtn) {
-  // Si ya hay un picker abierto para esta tarea, cerrarlo
+function applyCardColorTheme(cardEl, color) {
+  if (!cardEl) return;
+  if (!color) {
+    cardEl.classList.remove('ef-colored-card');
+    delete cardEl.dataset.cardColor;
+    return;
+  }
+  const preset = resolvePastelPreset(color);
+  if (!preset) return;
+  cardEl.classList.add('ef-colored-card');
+  cardEl.dataset.cardColor = preset.key;
+}
+
+let activeColorPickerCleanup = null;
+
+function closeColorPicker() {
   const existing = document.getElementById('taskColorPicker');
   if (existing) existing.remove();
-
-  const picker = document.createElement('div');
-  picker.id = 'taskColorPicker';
-  picker.className = 'task-color-picker';
-
-  TASK_COLOR_PALETTE.forEach((color) => {
-    const swatch = document.createElement('button');
-    swatch.className = 'color-swatch';
-    if (color === null) {
-      swatch.textContent = '✕';
-      swatch.title = 'Quitar color (volver al default)';
-      swatch.classList.add('color-swatch--none');
-    } else {
-      swatch.style.backgroundColor = color;
-      swatch.title = color;
-      if (task.color && task.color.toLowerCase() === color.toLowerCase()) {
-        swatch.classList.add('color-swatch--selected');
-      }
-    }
-    swatch.addEventListener('click', (e) => {
-      e.stopPropagation();
-      applyTaskColor(task, color);
-      picker.remove();
-    });
-    picker.appendChild(swatch);
-  });
-
-  // Posicionar el picker cerca del botón
-  anchorBtn.parentElement.style.position = 'relative';
-  picker.style.position = 'absolute';
-  picker.style.top = '100%';
-  picker.style.right = '0';
-  picker.style.zIndex = '1000';
-
-  anchorBtn.parentElement.appendChild(picker);
-
-  // Cerrar al click fuera
-  setTimeout(() => {
-    const closeOnOutside = (e) => {
-      if (!picker.contains(e.target)) {
-        picker.remove();
-        document.removeEventListener('click', closeOnOutside);
-      }
-    };
-    document.addEventListener('click', closeOnOutside);
-  }, 0);
+  if (typeof activeColorPickerCleanup === 'function') {
+    activeColorPickerCleanup();
+    activeColorPickerCleanup = null;
+  }
 }
 
 /**
- * Aplica un color a la tarea, persiste en localStorage y re-renderiza.
+ * Popover flotante de colores renderizado como portal en document.body (position: fixed).
+ * Soporta firma unificada: openColorPicker(anchorBtn, currentColor, onSelect)
+ * y firma retrocompatible: openColorPicker(taskObj, anchorBtn).
+ */
+function openColorPicker(arg1, arg2, arg3) {
+  let anchorBtn = arg1;
+  let currentColor = arg2;
+  let onSelect = arg3;
+
+  // Retrocompatibilidad si alguien invoca openColorPicker(taskObj, anchorBtn)
+  if (arg1 && !(arg1 instanceof Element) && arg2 instanceof Element) {
+    const legacyTask = arg1;
+    anchorBtn = arg2;
+    currentColor = legacyTask.color || null;
+    onSelect = (c) => applyTaskColor(legacyTask, c);
+  }
+
+  if (!anchorBtn || typeof anchorBtn.getBoundingClientRect !== 'function') return;
+
+  // Toggle si se toca el mismo botón que ya abrió el popover
+  const existing = document.getElementById('taskColorPicker');
+  const wasSameAnchor = existing && existing._anchorBtn === anchorBtn;
+  closeColorPicker();
+  if (wasSameAnchor) return;
+
+  const activePreset = resolvePastelPreset(currentColor);
+  const picker = document.createElement('div');
+  picker.id = 'taskColorPicker';
+  picker.className = 'task-color-picker';
+  picker.setAttribute('role', 'dialog');
+  picker.setAttribute('aria-label', 'Selector de color pastel');
+  picker._anchorBtn = anchorBtn;
+
+  // Cabecera del popover con botón cerrar X
+  const header = document.createElement('div');
+  header.className = 'color-picker-header';
+  const title = document.createElement('span');
+  title.className = 'color-picker-title';
+  title.textContent = 'Color de tarjeta';
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'color-picker-close';
+  closeBtn.title = 'Cerrar selector';
+  closeBtn.setAttribute('aria-label', 'Cerrar selector de color');
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeColorPicker();
+  });
+  header.append(title, closeBtn);
+  picker.appendChild(header);
+
+  // Cuadrícula de 8 tonos pastel suaves
+  const grid = document.createElement('div');
+  grid.className = 'color-picker-grid';
+
+  PASTEL_COLOR_PRESETS.forEach((preset) => {
+    const swatch = document.createElement('button');
+    swatch.type = 'button';
+    swatch.className = 'color-swatch';
+    swatch.style.backgroundColor = preset.hex;
+    swatch.title = preset.name;
+    swatch.setAttribute('aria-label', preset.name);
+    if (activePreset && activePreset.key === preset.key) {
+      swatch.classList.add('color-swatch--selected');
+    }
+    swatch.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeColorPicker();
+      if (typeof onSelect === 'function') onSelect(preset.hex);
+    });
+    grid.appendChild(swatch);
+  });
+  picker.appendChild(grid);
+
+  // Botón inferior "Sin color (tema base)"
+  const resetBtn = document.createElement('button');
+  resetBtn.type = 'button';
+  resetBtn.className = 'color-picker-reset';
+  resetBtn.textContent = '↺ Sin color (tema base)';
+  if (!activePreset) resetBtn.classList.add('active');
+  resetBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeColorPicker();
+    if (typeof onSelect === 'function') onSelect(null);
+  });
+  picker.appendChild(resetBtn);
+
+  // Montar en portal body con position: fixed y cálculo inteligente de bordes
+  picker.style.visibility = 'hidden';
+  document.body.appendChild(picker);
+
+  const rect = anchorBtn.getBoundingClientRect();
+  const popW = picker.offsetWidth || 208;
+  const popH = picker.offsetHeight || 152;
+  const pad = 12;
+  const vw = window.innerWidth || document.documentElement.clientWidth || 360;
+  const vh = window.innerHeight || document.documentElement.clientHeight || 640;
+
+  let left = rect.right - popW;
+  if (left < pad) left = pad;
+  if (left + popW > vw - pad) left = Math.max(pad, vw - popW - pad);
+
+  let top = rect.bottom + 8;
+  if (top + popH > vh - pad) {
+    const above = rect.top - popH - 8;
+    top = above >= pad ? above : Math.max(pad, vh - popH - pad);
+  }
+
+  picker.style.left = `${Math.round(left)}px`;
+  picker.style.top = `${Math.round(top)}px`;
+  picker.style.visibility = 'visible';
+
+  // Cierre limpio al tocar fuera, presionar Escape o hacer scroll
+  const onOutside = (e) => {
+    if (!picker.contains(e.target) && e.target !== anchorBtn && !anchorBtn.contains(e.target)) {
+      closeColorPicker();
+    }
+  };
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') closeColorPicker();
+  };
+  const onScrollOrResize = () => closeColorPicker();
+
+  const timerId = setTimeout(() => {
+    document.addEventListener('pointerdown', onOutside, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
+  }, 0);
+
+  activeColorPickerCleanup = () => {
+    clearTimeout(timerId);
+    document.removeEventListener('pointerdown', onOutside, true);
+    document.removeEventListener('keydown', onKeyDown, true);
+    window.removeEventListener('scroll', onScrollOrResize, true);
+    window.removeEventListener('resize', onScrollOrResize);
+  };
+}
+
+/**
+ * Aplica un color pastel a la tarea, persiste en localStorage y re-renderiza.
  * Si color === null, se quita el color (vuelve al default).
  */
 function applyTaskColor(task, color) {
   if (color === null) {
     delete task.color;
   } else {
-    task.color = color;
+    task.color = normalizePastelColor(color) || color;
   }
   saveDataToLocalStorage();
   renderTasks();
@@ -1349,11 +1528,9 @@ function buildPendingTaskItem(folder, task) {
   taskDiv.dataset.taskId = task.id;
   taskDiv.draggable = true;
 
-  // v2.7.0: aplicar color de la tarea si tiene uno asignado
+  // v37: aplicar armonización cromática pastel integral si la tarea tiene color
   if (task.color) {
-    taskDiv.style.backgroundColor = task.color;
-    // Borde sutil que combine con el color, para mejor contraste
-    taskDiv.style.borderColor = darkenColor(task.color, 0.3);
+    applyCardColorTheme(taskDiv, task.color);
   }
 
   taskDiv.addEventListener('dragstart', handleTaskDragStart);
@@ -1424,13 +1601,14 @@ function buildPendingTaskItem(folder, task) {
       inlineMoveTask(task, false);
     });
 
-    // v2.7.0: botón de color (paleta) en reemplazo del botón ✏ eliminado
+    // v37: botón de color (paleta pastel en popover portal)
     const colorBtn = document.createElement('button');
+    colorBtn.type = 'button';
     colorBtn.textContent = '🎨';
     colorBtn.title = 'Cambiar color de la tarea';
     colorBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      openColorPicker(task, colorBtn);
+      openColorPicker(colorBtn, task.color || null, (newColor) => applyTaskColor(task, newColor));
     });
 
     // Botón Captura 📸
@@ -1887,7 +2065,7 @@ function updateAppVersionBadge() {
   try {
     const el = document.getElementById('appVersionBadge');
     if (!el) return;
-    el.textContent = 'v36 · 🔊';
+    el.textContent = 'v37 · 🔊';
     el.title = 'Efectiva v34 — PiP blindado, Memoria por Nodos y Motor Financiero';
   } catch (_) {}
 }
@@ -2511,7 +2689,7 @@ function triggerAutomationEvent(eventType, payload) {
         saveDataToLocalStorage();
         if (typeof renderTasks === 'function') renderTasks();
       } else if (rule.accion_automatica === 'asignar_color' && payload.task) {
-        payload.task.color = params.nuevo_color || params.color || '#FF5252';
+        payload.task.color = normalizePastelColor(params.nuevo_color || params.color || '#F2B8C6') || '#F2B8C6';
         saveDataToLocalStorage();
         if (typeof renderTasks === 'function') renderTasks();
       } else if (rule.accion_automatica === 'crear_tarea') {

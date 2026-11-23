@@ -4340,3 +4340,414 @@ body.light-theme .table-card-item {
   background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(37, 99, 235, 0.06));
   border-color: rgba(37, 99, 235, 0.25);
 }
+
+
+/* ============================================================================
+ *  EFECTIVA v37 — POPOVER PORTAL DE COLORES & ARMONIZACIÓN PASTEL POR TARJETA
+ *  Tokens locales por tarjeta:
+ *    --card-accent, --card-header-bg, --card-header-text, --card-bg,
+ *    --card-surface, --card-surface-2, --card-border, --card-text, --card-text-muted
+ * ============================================================================ */
+
+/* 1) Popover flotante en capa superior (portal en document.body, position: fixed) */
+.task-color-picker {
+  position: fixed !important;
+  z-index: 10060 !important;
+  display: flex !important;
+  flex-direction: column;
+  gap: 10px;
+  width: 216px !important;
+  padding: 12px !important;
+  margin: 0 !important;
+  border-radius: 16px !important;
+  background: rgba(15, 23, 42, 0.96) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(148, 163, 184, 0.28) !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.48), 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+  color: #f8fafc;
+  box-sizing: border-box;
+  animation: efColorPopIn 0.14s ease-out;
+}
+@keyframes efColorPopIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.color-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.color-picker-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #cbd5e1;
+}
+.color-picker-close {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.color-picker-close:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+.color-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  justify-items: center;
+}
+.task-color-picker .color-swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.45), 0 2px 6px rgba(0, 0, 0, 0.24);
+}
+.task-color-picker .color-swatch:hover {
+  transform: scale(1.12);
+  border-color: #ffffff;
+}
+.task-color-picker .color-swatch--selected {
+  border: 2.5px solid #ffffff !important;
+  box-shadow: 0 0 0 2.5px #38bdf8, 0 3px 10px rgba(0, 0, 0, 0.32) !important;
+  transform: scale(1.06);
+}
+.color-picker-reset {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.color-picker-reset:hover,
+.color-picker-reset.active {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #f8fafc;
+}
+
+/* Popover en Tema Claro */
+body.light-theme .task-color-picker {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16), 0 2px 8px rgba(15, 23, 42, 0.08) !important;
+  color: #0f172a;
+}
+body.light-theme .color-picker-title { color: #334155; }
+body.light-theme .color-picker-close {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+body.light-theme .color-picker-close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+body.light-theme .task-color-picker .color-swatch {
+  border-color: rgba(15, 23, 42, 0.14);
+}
+body.light-theme .task-color-picker .color-swatch--selected {
+  border-color: #0f172a !important;
+  box-shadow: 0 0 0 2.5px #2563eb !important;
+}
+body.light-theme .color-picker-reset {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+body.light-theme .color-picker-reset:hover,
+body.light-theme .color-picker-reset.active {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1e3a8a;
+}
+
+/* 2) Tokens de Paleta Pastel — Tema DARK & CYBERPUNK (contraste WCAG AAA) */
+.ef-colored-card {
+  --card-header-text: #f8fafc;
+  --card-text: #f1f5f9;
+  --card-text-muted: #cbd5e1;
+}
+.ef-colored-card[data-card-color="mint"] {
+  --card-accent: #A7E3C6;
+  --card-header-bg: #1b3129;
+  --card-bg: #12211c;
+  --card-surface: #182b24;
+  --card-surface-2: #223b32;
+  --card-border: rgba(167, 227, 198, 0.34);
+}
+.ef-colored-card[data-card-color="lavender"] {
+  --card-accent: #C9B8F5;
+  --card-header-bg: #26203a;
+  --card-bg: #1a1629;
+  --card-surface: #221c35;
+  --card-surface-2: #2f2748;
+  --card-border: rgba(201, 184, 245, 0.34);
+}
+.ef-colored-card[data-card-color="peach"] {
+  --card-accent: #F7C5A8;
+  --card-header-bg: #35231c;
+  --card-bg: #241813;
+  --card-surface: #2e1f19;
+  --card-surface-2: #3f2b22;
+  --card-border: rgba(247, 197, 168, 0.34);
+}
+.ef-colored-card[data-card-color="sky"] {
+  --card-accent: #A8D4F5;
+  --card-header-bg: #1a2b3c;
+  --card-bg: #121e2b;
+  --card-surface: #182737;
+  --card-surface-2: #22374d;
+  --card-border: rgba(168, 212, 245, 0.34);
+}
+.ef-colored-card[data-card-color="rose"] {
+  --card-accent: #F2B8C6;
+  --card-header-bg: #361f28;
+  --card-bg: #25151c;
+  --card-surface: #301c24;
+  --card-surface-2: #422631;
+  --card-border: rgba(242, 184, 198, 0.34);
+}
+.ef-colored-card[data-card-color="sand"] {
+  --card-accent: #EDE0B4;
+  --card-header-bg: #302b1d;
+  --card-bg: #211e14;
+  --card-surface: #2b271a;
+  --card-surface-2: #3b3523;
+  --card-border: rgba(237, 224, 180, 0.34);
+}
+.ef-colored-card[data-card-color="sage"] {
+  --card-accent: #B8D4B8;
+  --card-header-bg: #212e22;
+  --card-bg: #172018;
+  --card-surface: #1e2a1f;
+  --card-surface-2: #2a3a2b;
+  --card-border: rgba(184, 212, 184, 0.34);
+}
+.ef-colored-card[data-card-color="slate"] {
+  --card-accent: #B4C6DC;
+  --card-header-bg: #202a38;
+  --card-bg: #161d27;
+  --card-surface: #1d2633;
+  --card-surface-2: #293547;
+  --card-border: rgba(180, 198, 220, 0.34);
+}
+
+/* 3) Tokens de Paleta Pastel — Tema LIGHT (contraste WCAG AAA) */
+body.light-theme .ef-colored-card {
+  --card-header-text: #0f172a;
+  --card-text: #1e293b;
+  --card-text-muted: #475569;
+}
+body.light-theme .ef-colored-card[data-card-color="mint"] {
+  --card-accent: #68b892;
+  --card-header-bg: #dff5ea;
+  --card-bg: #f3fbf7;
+  --card-surface: #ffffff;
+  --card-surface-2: #d2f0e1;
+  --card-border: #a9dec4;
+}
+body.light-theme .ef-colored-card[data-card-color="lavender"] {
+  --card-accent: #9b84de;
+  --card-header-bg: #ece6fc;
+  --card-bg: #f7f5fe;
+  --card-surface: #ffffff;
+  --card-surface-2: #e2daf9;
+  --card-border: #cbbcf2;
+}
+body.light-theme .ef-colored-card[data-card-color="peach"] {
+  --card-accent: #de9770;
+  --card-header-bg: #fce9dd;
+  --card-bg: #fef8f4;
+  --card-surface: #ffffff;
+  --card-surface-2: #f8dfd0;
+  --card-border: #f0c2a7;
+}
+body.light-theme .ef-colored-card[data-card-color="sky"] {
+  --card-accent: #6ea9db;
+  --card-header-bg: #e2f0fc;
+  --card-bg: #f4f9fe;
+  --card-surface: #ffffff;
+  --card-surface-2: #d4e8fa;
+  --card-border: #a9d1f2;
+}
+body.light-theme .ef-colored-card[data-card-color="rose"] {
+  --card-accent: #d98499;
+  --card-header-bg: #fae4ea;
+  --card-bg: #fdf6f8;
+  --card-surface: #ffffff;
+  --card-surface-2: #f5d6df;
+  --card-border: #ebb5c3;
+}
+body.light-theme .ef-colored-card[data-card-color="sand"] {
+  --card-accent: #c4b06b;
+  --card-header-bg: #f7f1db;
+  --card-bg: #fcfaf1;
+  --card-surface: #ffffff;
+  --card-surface-2: #efe6c5;
+  --card-border: #dfd19e;
+}
+body.light-theme .ef-colored-card[data-card-color="sage"] {
+  --card-accent: #7da67d;
+  --card-header-bg: #e5f0e5;
+  --card-bg: #f5faf5;
+  --card-surface: #ffffff;
+  --card-surface-2: #d8e8d8;
+  --card-border: #b6d1b6;
+}
+body.light-theme .ef-colored-card[data-card-color="slate"] {
+  --card-accent: #7d96b5;
+  --card-header-bg: #e4ecf5;
+  --card-bg: #f5f8fc;
+  --card-surface: #ffffff;
+  --card-surface-2: #d7e3f0;
+  --card-border: #b4c6dc;
+}
+
+/* 4) Aplicación integral a la tarjeta y TODOS sus subcomponentes internos */
+.task.ef-colored-card,
+body.light-theme .task.ef-colored-card,
+body.cyberpunk-theme .task.ef-colored-card {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  border-left: 4px solid var(--card-accent) !important;
+  color: var(--card-text) !important;
+  overflow: visible !important;
+  padding: 0 !important;
+}
+body.cyberpunk-theme .task.ef-colored-card {
+  box-shadow: 0 0 0 1px var(--card-border), 0 6px 20px rgba(0, 0, 0, 0.38) !important;
+}
+.note-item.ef-colored-card {
+  border-left: 4px solid var(--card-accent) !important;
+}
+
+/* Encabezado armónico */
+.task.ef-colored-card > .task-header {
+  background: var(--card-header-bg) !important;
+  color: var(--card-header-text) !important;
+  padding: 0.72rem 0.85rem;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 1px solid var(--card-border);
+}
+.task.ef-colored-card .task-name-text {
+  color: var(--card-header-text) !important;
+  font-weight: 700;
+}
+.task.ef-colored-card .task-buttons button,
+body.light-theme .task.ef-colored-card .task-buttons button,
+body.cyberpunk-theme .task.ef-colored-card .task-buttons button {
+  background: var(--card-surface-2) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--card-header-text) !important;
+}
+.task.ef-colored-card .task-buttons button:hover {
+  filter: brightness(1.08);
+}
+
+/* Cuerpo expandido de Tareas */
+.task.ef-colored-card .task-steps {
+  background: var(--card-bg) !important;
+  padding: 0.7rem 0.85rem 0.85rem !important;
+  margin-top: 0 !important;
+  gap: 0.5rem;
+}
+.task.ef-colored-card .new-step-input,
+body.light-theme .task.ef-colored-card .new-step-input,
+body.cyberpunk-theme .task.ef-colored-card .new-step-input {
+  background: var(--card-surface) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--card-text) !important;
+}
+.task.ef-colored-card .new-step-input::placeholder {
+  color: var(--card-text-muted) !important;
+}
+.task.ef-colored-card .new-step-input:focus {
+  border-color: var(--card-accent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--card-accent) 28%, transparent) !important;
+}
+
+/* Barra de distribución de tiempo */
+.task.ef-colored-card .step-time-balance-bar {
+  background: var(--card-surface-2) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--card-text) !important;
+}
+.task.ef-colored-card .step-equalize-btn {
+  background: var(--card-surface) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--card-text) !important;
+}
+
+/* Subtarjetas de pasos y badges de minutos */
+.task.ef-colored-card .step-item,
+body.light-theme .task.ef-colored-card .step-item,
+body.cyberpunk-theme .task.ef-colored-card .step-item {
+  background: var(--card-surface) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--card-text) !important;
+}
+.task.ef-colored-card .step-text {
+  color: var(--card-text) !important;
+}
+.task.ef-colored-card .step-buttons button,
+.task.ef-colored-card .step-buttons button.step-time-badge,
+body.light-theme .task.ef-colored-card .step-buttons button,
+body.light-theme .task.ef-colored-card .step-buttons button.step-time-badge,
+body.cyberpunk-theme .task.ef-colored-card .step-buttons button,
+body.cyberpunk-theme .task.ef-colored-card .step-buttons button.step-time-badge {
+  background: var(--card-surface-2) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--card-text) !important;
+}
+
+/* Cuerpo expandido y editor inline de Notas */
+.task.ef-colored-card .note-expanded-body {
+  background: var(--card-bg) !important;
+  border-top: none !important;
+  color: var(--card-text) !important;
+}
+.task.ef-colored-card .note-reader-content {
+  background: var(--card-surface);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--card-text) !important;
+}
+.task.ef-colored-card .note-reader-footer {
+  color: var(--card-text-muted) !important;
+  border-top-color: var(--card-border) !important;
+}
+.task.ef-colored-card .edit-note-inline-btn {
+  background: var(--card-surface-2) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--card-text) !important;
+}
+.task.ef-colored-card .note-edit-form input,
+.task.ef-colored-card .note-edit-form textarea {
+  background: var(--card-surface) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--card-text) !important;
+}
