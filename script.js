@@ -136,6 +136,9 @@ async function initializeEfectiva() {
       if (cloudData.finance && window.EfectivaFinance && typeof window.EfectivaFinance.hydrateFromCloud === 'function') {
         window.EfectivaFinance.hydrateFromCloud(cloudData.finance);
       }
+      if (Array.isArray(cloudData.tables) && window.EfectivaTables && typeof window.EfectivaTables.hydrateFromCloud === 'function') {
+        window.EfectivaTables.hydrateFromCloud(cloudData.tables);
+      }
     } else {
       window.EfectivaCloud.scheduleSave({ folders, trash });
     }
@@ -295,6 +298,16 @@ function handleAppBackAction() {
     if (aiClose) aiClose.click();
     return true;
   }
+  const finActionModal = document.getElementById('finActionModal');
+  if (finActionModal) {
+    finActionModal.remove();
+    return true;
+  }
+  const tableEditorModal = document.getElementById('tableEditorModal');
+  if (tableEditorModal) {
+    tableEditorModal.remove();
+    return true;
+  }
   const ccModal = document.getElementById('controlCenterModal');
   if (ccModal && ccModal.style.display === 'flex') {
     ccModal.style.display = 'none';
@@ -319,11 +332,13 @@ function handleAppBackAction() {
     return true;
   }
 
-  // 3) Si estamos dentro de una carpeta, papelera o recompensas, volver siempre a Carpetas (con o sin PiP activo)
+  // 3) Si estamos dentro de una carpeta, papelera, finanzas o recompensas, volver siempre a Carpetas (con o sin PiP activo)
   const inTasks = tasksSection && tasksSection.style.display !== 'none';
   const inTrash = trashSection && trashSection.style.display !== 'none';
   const inReward = rewardSection && rewardSection.style.display !== 'none';
-  if (currentFolderId || inTasks || inTrash || inReward) {
+  const finSec = document.getElementById('financeSection');
+  const inFinance = finSec && finSec.style.display !== 'none';
+  if (currentFolderId || inTasks || inTrash || inReward || inFinance) {
     showFolders();
     return true;
   }
@@ -337,7 +352,9 @@ function handlePopState(event) {
     return;
   }
   if (event.state) {
-    if (event.state.rewards) {
+    if (event.state.finance && window.EfectivaFinanceUI && typeof window.EfectivaFinanceUI.openFinanceView === 'function') {
+      window.EfectivaFinanceUI.openFinanceView(false);
+    } else if (event.state.rewards) {
       openFolder(rewardsFolderId, false);
     } else if (event.state.folderId) {
       openFolder(event.state.folderId, false);
@@ -390,6 +407,8 @@ function showFolders() {
   scheduleModal.style.display = 'none';
   alarmModal.style.display = 'none';
   trashSection.style.display = 'none';
+  const finSec = document.getElementById('financeSection');
+  if (finSec) finSec.style.display = 'none';
   foldersSection.style.display = 'block';
   currentFolderId = null;
   if (!(presentationOpen && isPresentationMinimized)) {
@@ -408,6 +427,8 @@ function openFolder(folderId, pushToHistory = true) {
   rewardSection.style.display = 'none';
   scheduleModal.style.display = 'none';
   alarmModal.style.display = 'none';
+  const finSec = document.getElementById('financeSection');
+  if (finSec) finSec.style.display = 'none';
 
   // Si hay PiP minimizado activo, mantenerlo visible; de lo contrario ocultar el modal
   if (!(presentationOpen && isPresentationMinimized)) {
@@ -442,6 +463,8 @@ function showTrash(pushHistory = true) {
   rewardSection.style.display = 'none';
   scheduleModal.style.display = 'none';
   alarmModal.style.display = 'none';
+  const finSec = document.getElementById('financeSection');
+  if (finSec) finSec.style.display = 'none';
   if (!(presentationOpen && isPresentationMinimized)) {
     presentationModal.style.display = 'none';
   }
@@ -1017,6 +1040,55 @@ function renderTasks() {
   const currentNotes = (typeof notes !== 'undefined' ? notes : []).filter(n => n.folderId === currentFolderId || !n.folderId);
   currentNotes.forEach(note => tasksList.appendChild(buildNoteItem(note)));
 
+  // Renderizar tablas genéricas de esta carpeta (Módulo Tablas v36)
+  if (window.EfectivaTables && typeof window.EfectivaTables.listarTablas === 'function') {
+    const tblRes = window.EfectivaTables.listarTablas({ carpeta_id: currentFolderId, incluir_filas: false });
+    (tblRes.tablas || []).forEach(tbl => {
+      const card = document.createElement('div');
+      card.className = 'table-card-item';
+      const main = document.createElement('div');
+      main.className = 'table-card-main';
+      main.innerHTML = `<span class="table-card-title">📊 ${tbl.title.replace(/</g, '&lt;')}</span><span class="table-card-meta">${(tbl.columns || []).length} columnas · ${tbl.rowCount} fila(s)</span>`;
+      main.onclick = () => window.EfectivaTables.openTableEditor(tbl.id);
+
+      const actions = document.createElement('div');
+      actions.className = 'table-card-actions';
+      const openBtn = document.createElement('button');
+      openBtn.type = 'button';
+      openBtn.className = 'fin-btn sm primary';
+      openBtn.textContent = 'Abrir';
+      openBtn.onclick = () => window.EfectivaTables.openTableEditor(tbl.id);
+
+      const csvBtn = document.createElement('button');
+      csvBtn.type = 'button';
+      csvBtn.className = 'fin-btn sm';
+      csvBtn.title = 'Exportar a Excel (.csv)';
+      csvBtn.textContent = '📥 CSV';
+      csvBtn.onclick = () => window.EfectivaTables.downloadTableCsv(tbl.id);
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'fin-btn sm danger';
+      delBtn.title = 'Eliminar tabla';
+      delBtn.textContent = '🗑';
+      delBtn.onclick = () => {
+        const doDel = () => {
+          window.EfectivaTables.gestionarTabla({ accion: 'eliminar', tabla_id: tbl.id });
+          renderTasks();
+        };
+        if (typeof asistaConfirm === 'function') {
+          asistaConfirm(`¿Eliminar la tabla "${tbl.title}"?`, { title: 'Eliminar tabla', confirmText: 'Eliminar' }).then(ok => { if (ok) doDel(); });
+        } else if (confirm(`¿Eliminar la tabla "${tbl.title}"?`)) {
+          doDel();
+        }
+      };
+
+      actions.append(openBtn, csvBtn, delBtn);
+      card.append(main, actions);
+      tasksList.appendChild(card);
+    });
+  }
+
   newTaskInput.style.display = 'block';
   newTaskTimeInput.style.display = 'block';
 
@@ -1028,30 +1100,76 @@ function renderTasks() {
     completedMiniFolder.classList.toggle('expanded');
   };
 
-  // Lógica del Selector Unificado de Modo (Tarea / Nota)
+  // Lógica del Selector Unificado de Modo (Tarea / Nota / Tabla)
   const modeTabTask = document.getElementById('modeTabTask');
   const modeTabNote = document.getElementById('modeTabNote');
+  const modeTabTable = document.getElementById('modeTabTable');
+  const modeTabTemplates = document.getElementById('modeTabTemplates');
   const taskCreationForm = document.getElementById('taskCreationForm');
   const noteCreationForm = document.getElementById('noteCreationForm');
+  const tableCreationForm = document.getElementById('tableCreationForm');
+  const userTemplatesPanel = document.getElementById('userTemplatesPanel');
   const saveNewNoteBtn = document.getElementById('saveNewNoteBtn');
   const newNoteTitleInput = document.getElementById('newNoteTitleInput');
   const newNoteContentInput = document.getElementById('newNoteContentInput');
+  const saveNewTableBtn = document.getElementById('saveNewTableBtn');
+  const newTableTitleInput = document.getElementById('newTableTitleInput');
+  const newTableColsInput = document.getElementById('newTableColsInput');
+
+  const activateCreationTab = (mode) => {
+    [modeTabTask, modeTabNote, modeTabTable, modeTabTemplates].forEach(b => b && b.classList.remove('active'));
+    if (taskCreationForm) taskCreationForm.style.display = mode === 'task' ? 'flex' : 'none';
+    if (noteCreationForm) noteCreationForm.style.display = mode === 'note' ? 'flex' : 'none';
+    if (tableCreationForm) tableCreationForm.style.display = mode === 'table' ? 'flex' : 'none';
+    if (userTemplatesPanel) userTemplatesPanel.style.display = mode === 'templates' ? 'flex' : 'none';
+    if (mode === 'task' && modeTabTask) { modeTabTask.classList.add('active'); if (newTaskInput) newTaskInput.focus(); }
+    if (mode === 'note' && modeTabNote) { modeTabNote.classList.add('active'); if (newNoteTitleInput) newNoteTitleInput.focus(); }
+    if (mode === 'table' && modeTabTable) { modeTabTable.classList.add('active'); if (newTableTitleInput) newTableTitleInput.focus(); }
+    if (mode === 'templates' && modeTabTemplates) { modeTabTemplates.classList.add('active'); }
+  };
 
   if (modeTabTask && modeTabNote && taskCreationForm && noteCreationForm) {
-    modeTabTask.onclick = () => {
-      modeTabTask.classList.add('active');
-      modeTabNote.classList.remove('active');
-      taskCreationForm.style.display = 'flex';
-      noteCreationForm.style.display = 'none';
-      if (newTaskInput) newTaskInput.focus();
+    modeTabTask.onclick = () => activateCreationTab('task');
+    modeTabNote.onclick = () => activateCreationTab('note');
+    if (modeTabTable) modeTabTable.onclick = () => activateCreationTab('table');
+  }
+
+  if (saveNewTableBtn && newTableTitleInput) {
+    saveNewTableBtn.onclick = () => {
+      if (!window.EfectivaTables) return;
+      const title = (newTableTitleInput.value || '').trim();
+      if (!title) return;
+      const rawCols = (newTableColsInput ? newTableColsInput.value : '').split(',').map(s => s.trim()).filter(Boolean);
+      const columns = (rawCols.length ? rawCols : ['Item', 'Valor']).map(name => {
+        const lower = name.toLowerCase();
+        const type = /precio|monto|costo|total|saldo|presupuesto|q|usd/.test(lower) ? 'currency'
+          : /cant|num|nota|punt|edad|hora|min/.test(lower) ? 'number'
+          : /fecha|dia|venc/.test(lower) ? 'date'
+          : /hecho|listo|check|ok/.test(lower) ? 'checkbox'
+          : 'text';
+        return { name, type };
+      });
+      const res = window.EfectivaTables.gestionarTabla({
+        accion: 'crear',
+        titulo: title,
+        carpeta_id: currentFolderId,
+        columnas: columns
+      });
+      newTableTitleInput.value = '';
+      renderTasks();
+      if (res && res.ok && res.tabla) {
+        window.EfectivaTables.openTableEditor(res.tabla.id);
+      }
     };
-    modeTabNote.onclick = () => {
-      modeTabNote.classList.add('active');
-      modeTabTask.classList.remove('active');
-      taskCreationForm.style.display = 'none';
-      noteCreationForm.style.display = 'flex';
-      if (newNoteTitleInput) newNoteTitleInput.focus();
-    };
+  }
+
+  if (!window.__efectivaTablesRenderBound) {
+    window.__efectivaTablesRenderBound = true;
+    window.addEventListener('efectiva:tables-updated', () => {
+      if (currentFolderId && tasksSection && tasksSection.style.display !== 'none') {
+        renderTasks();
+      }
+    });
   }
 
   if (saveNewNoteBtn && newNoteTitleInput && newNoteContentInput) {
@@ -1769,7 +1887,7 @@ function updateAppVersionBadge() {
   try {
     const el = document.getElementById('appVersionBadge');
     if (!el) return;
-    el.textContent = 'v35 · 🔊';
+    el.textContent = 'v36 · 🔊';
     el.title = 'Efectiva v34 — PiP blindado, Memoria por Nodos y Motor Financiero';
   } catch (_) {}
 }
@@ -4675,22 +4793,25 @@ function releaseWakeLock() {
 (function setupUserTemplatesTab() {
   const tabTask = document.getElementById('modeTabTask');
   const tabNote = document.getElementById('modeTabNote');
+  const tabTable = document.getElementById('modeTabTable');
   const tabTpl = document.getElementById('modeTabTemplates');
   const tplPanel = document.getElementById('userTemplatesPanel');
   const taskForm = document.getElementById('taskCreationForm');
   const noteForm = document.getElementById('noteCreationForm');
+  const tableForm = document.getElementById('tableCreationForm');
   if (!tabTpl || !tplPanel) return;
 
   tabTpl.addEventListener('click', () => {
-    [tabTask, tabNote].forEach(b => b && b.classList.remove('active'));
+    [tabTask, tabNote, tabTable].forEach(b => b && b.classList.remove('active'));
     tabTpl.classList.add('active');
     if (taskForm) taskForm.style.display = 'none';
     if (noteForm) noteForm.style.display = 'none';
+    if (tableForm) tableForm.style.display = 'none';
     tplPanel.style.display = 'flex';
     renderUserTemplatesPanel();
   });
 
-  [tabTask, tabNote].forEach(btn => {
+  [tabTask, tabNote, tabTable].forEach(btn => {
     if (btn) {
       btn.addEventListener('click', () => {
         tabTpl.classList.remove('active');
@@ -5145,6 +5266,7 @@ window.EfectivaStateBridge = {
       automationRules: Array.isArray(automationRules) ? automationRules : [],
       agentMemory,
       finance: (window.EfectivaFinance && typeof window.EfectivaFinance.exportState === 'function') ? window.EfectivaFinance.exportState() : null,
+      tables: (window.EfectivaTables && typeof window.EfectivaTables.exportState === 'function') ? window.EfectivaTables.exportState() : [],
       userStats: userStats || { xp_total: 0, nivel: 1, racha_dias_consecutivos: 1 },
       currentFolderId: (typeof currentFolderId !== 'undefined') ? currentFolderId : null,
       activePresentation,
@@ -5182,6 +5304,9 @@ window.EfectivaStateBridge = {
     }
     if (nextState.finance && window.EfectivaFinance && typeof window.EfectivaFinance.hydrateFromCloud === 'function') {
       window.EfectivaFinance.hydrateFromCloud(nextState.finance);
+    }
+    if (Array.isArray(nextState.tables) && window.EfectivaTables && typeof window.EfectivaTables.hydrateFromCloud === 'function') {
+      window.EfectivaTables.hydrateFromCloud(nextState.tables);
     }
     if (nextState.userStats && typeof nextState.userStats === 'object') {
       userStats = Object.assign(userStats, nextState.userStats);

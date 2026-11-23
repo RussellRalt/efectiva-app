@@ -61,7 +61,8 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
    - Grado 1 (Nodos de dominio: \`finanzas\`, \`metas\`, \`ineb\`, \`iglesia\`, \`proyectos\`, \`hogar\`, \`investigacion\`): cargalos bajo demanda con \`cargar_nodo_memoria(nodo, grado_maximo=1)\`.
    - Grado 2 (Histórico detallado): solo con \`buscar_memoria_relevante\` o \`grado_maximo=2\`.
 3. **Motor Financiero Estructurado (GTQ / USD)**: Para cuentas, movimientos, transferencias, deudas, por cobrar, inversiones (provee vs drena) y arqueos, usá SIEMPRE las tools \`fin_*\` (\`fin_obtener_resumen\`, \`fin_gestionar_cuenta\`, \`fin_registrar_movimiento\`, \`fin_gestionar_compromiso\`, \`fin_gestionar_inversion\`, \`fin_conciliar_arqueo\`, \`fin_exportar_a_nota\`) — el código calcula al centavo exacto sin reescribir notas Markdown.
-4. **Control Operativo y Proactividad**: Usá \`guardar_tarea_completa\` (soporta minutos decimales exactos ej. 1.5 min = 90s), \`recalcular_agenda_dia\`, \`analizar_patrones_rendimiento\` (con filtros \`fecha_desde\`/\`fecha_hasta\`), \`buscar_web\` y \`leer_url_web\`. Confirmá siempre tus cambios con tools reales antes de responder.`;
+4. **Tablas Genéricas (Excel / Notion ligero, Lazy Loading)**: Para inventarios, registros (Ineb), comparativas o listas tabulares usá \`listar_tablas\` (sin filas por defecto), \`leer_tabla\` (paginada con \`offset\`/\`limit\`/\`filtro\`), \`gestionar_tabla\` (crear/actualizar estructura sin borrar filas) y \`parchear_filas_tabla\` (agregar/actualizar/eliminar filas puntuales sin reenviar toda la tabla).
+5. **Control Operativo y Proactividad**: Usá \`guardar_tarea_completa\` (soporta minutos decimales exactos ej. 1.5 min = 90s), \`recalcular_agenda_dia\`, \`analizar_patrones_rendimiento\` (con filtros \`fecha_desde\`/\`fecha_hasta\`), \`buscar_web\` y \`leer_url_web\`. Confirmá siempre tus cambios con tools reales antes de responder.`;
 
   // --------------------------------------------------------------------------
   //  TOOL DEFINITIONS
@@ -644,6 +645,62 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
           tipo_cambio_usd_gtq: { type: ['number', 'null'] }
         },
         required: []
+      } } },
+    { type: 'function', function: { name: 'listar_tablas',
+      description: 'Lazy Loading: lista tablas genéricas devolviendo SOLO metadata (id, title, folderId, columns, rowCount, updatedAt) SIN filas por defecto.',
+      parameters: {
+        type: 'object',
+        properties: {
+          carpeta_id: { type: ['string', 'null'], description: 'Filtrar por carpeta (opcional).' },
+          incluir_filas: { type: 'boolean', description: 'Default false (ahorra tokens).' }
+        },
+        required: []
+      } } },
+    { type: 'function', function: { name: 'leer_tabla',
+      description: 'Lectura paginada de una tabla genérica por bloques de filas (offset/limit) con filtro de texto opcional y totales numéricos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tabla_id: { type: 'string' },
+          offset: { type: 'integer', description: 'Default 0' },
+          limit: { type: 'integer', description: 'Default 50' },
+          filtro: { type: ['string', 'null'], description: 'Texto opcional para filtrar filas.' }
+        },
+        required: ['tabla_id']
+      } } },
+    { type: 'function', function: { name: 'gestionar_tabla',
+      description: 'Crea una tabla genérica, actualiza su título/columnas/etiquetas sin reescribir filas, o elimina la tabla.',
+      parameters: {
+        type: 'object',
+        properties: {
+          accion: { type: 'string', description: 'crear | actualizar_estructura | eliminar' },
+          tabla_id: { type: ['string', 'null'] },
+          titulo: { type: ['string', 'null'] },
+          carpeta_id: { type: ['string', 'null'] },
+          tarea_id: { type: ['string', 'null'] },
+          etiquetas: { type: 'array', items: { type: 'string' } },
+          columnas: {
+            type: 'array',
+            description: 'Columnas: [{ id?, name, type: "text"|"number"|"currency"|"date"|"select"|"checkbox", options?: string[] }]',
+            items: { type: 'object' }
+          },
+          filas_iniciales: { type: 'array', items: { type: 'object' } }
+        },
+        required: ['accion']
+      } } },
+    { type: 'function', function: { name: 'parchear_filas_tabla',
+      description: 'Agrega, actualiza o elimina filas puntuales en una tabla sin reenviar la tabla completa.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tabla_id: { type: 'string' },
+          operaciones: {
+            type: 'array',
+            description: '[{ accion: "agregar"|"actualizar"|"eliminar", fila_id?, datos?: { [colId_o_nombre]: valor } }]',
+            items: { type: 'object' }
+          }
+        },
+        required: ['tabla_id', 'operaciones']
       } } }
   ];
 
@@ -2499,6 +2556,24 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
         carpeta_id: args.carpeta_id || null,
         etiquetas: ['finanzas', 'snapshot']
       });
+    },
+
+    // --- MÓDULO DE TABLAS GENÉRICAS (LAZY LOADING v36) ---
+    listar_tablas(args = {}) {
+      if (!window.EfectivaTables) return { ok: false, error: 'Módulo de tablas no disponible.' };
+      return window.EfectivaTables.listarTablas(args);
+    },
+    leer_tabla(args = {}) {
+      if (!window.EfectivaTables) return { ok: false, error: 'Módulo de tablas no disponible.' };
+      return window.EfectivaTables.leerTabla(args);
+    },
+    gestionar_tabla(args = {}) {
+      if (!window.EfectivaTables) return { ok: false, error: 'Módulo de tablas no disponible.' };
+      return window.EfectivaTables.gestionarTabla(args);
+    },
+    parchear_filas_tabla(args = {}) {
+      if (!window.EfectivaTables) return { ok: false, error: 'Módulo de tablas no disponible.' };
+      return window.EfectivaTables.parchearFilasTabla(args);
     }
   };
 

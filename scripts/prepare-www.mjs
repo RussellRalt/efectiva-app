@@ -6,6 +6,8 @@ const files = [
   'style.css',
   'script.js',
   'finance.js',
+  'finance_ui.js',
+  'tables.js',
   'ai_chat.js',
   'modals.js',
   'auth.js',

@@ -3915,3 +3915,428 @@ body.light-theme .presentation-modal .justify-delay-btn {
   border: 2px solid #0b1120;
   box-shadow: 0 2px 10px rgba(34, 197, 94, 0.55);
 }
+
+
+/* ============================================================================
+ *  EFECTIVA v36 — VISTA EXCEL FINANZAS & MÓDULO DE TABLAS GENÉRICAS
+ * ============================================================================ */
+.finance-section {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 0.75rem 5.5rem;
+  box-sizing: border-box;
+}
+.fin-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.fin-kpi-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.6rem;
+}
+.fin-kpi {
+  background: var(--ef-surface, rgba(30, 41, 59, 0.78));
+  border: 1px solid var(--ef-surface-border, rgba(148, 163, 184, 0.22));
+  border-radius: 14px;
+  padding: 0.7rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+}
+.fin-kpi-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ef-text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.fin-kpi-val {
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: var(--ef-text, #f8fafc);
+  font-variant-numeric: tabular-nums;
+}
+.fin-kpi-val.pos { color: #22c55e; }
+.fin-kpi-val.neg { color: #ef4444; }
+.fin-kpi-sub {
+  font-size: 0.7rem;
+  color: var(--ef-text-muted, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-tabs {
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.fin-tab {
+  flex: 0 0 auto;
+  padding: 0.52rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid var(--ef-surface-border, rgba(148, 163, 184, 0.24));
+  background: var(--ef-btn-bg, rgba(30, 41, 59, 0.65));
+  color: var(--ef-text, #e2e8f0);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+.fin-tab.active {
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.32);
+}
+
+.fin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+.fin-btn {
+  padding: 0.48rem 0.82rem;
+  border-radius: 10px;
+  border: 1px solid var(--ef-surface-border, rgba(148, 163, 184, 0.26));
+  background: var(--ef-btn-bg, rgba(30, 41, 59, 0.78));
+  color: var(--ef-text, #f1f5f9);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fin-btn.primary {
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  border-color: transparent;
+  color: #fff;
+}
+.fin-btn.sm {
+  padding: 0.28rem 0.56rem;
+  font-size: 0.74rem;
+  border-radius: 8px;
+}
+.fin-btn.danger {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+.fin-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.fin-filter-bar input,
+.fin-filter-bar select {
+  padding: 0.42rem 0.6rem;
+  border-radius: 9px;
+  border: 1px solid var(--ef-surface-border, rgba(148, 163, 184, 0.26));
+  background: var(--ef-input-bg, rgba(15, 23, 42, 0.7));
+  color: var(--ef-text, #f8fafc);
+  font-size: 0.8rem;
+  min-width: 110px;
+}
+.fin-filter-bar input[type="search"] {
+  flex: 1 1 160px;
+}
+
+.sheet-scroll-wrap {
+  width: 100%;
+  max-height: 60vh;
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid var(--ef-surface-border, rgba(148, 163, 184, 0.24));
+  background: var(--ef-surface, rgba(15, 23, 42, 0.76));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+}
+.excel-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+.excel-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: rgba(15, 23, 42, 0.96);
+  color: #cbd5e1;
+  font-weight: 700;
+  text-align: left;
+  padding: 0.6rem 0.65rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.28);
+  border-right: 1px solid rgba(148, 163, 184, 0.12);
+  white-space: nowrap;
+}
+.excel-table thead th.excel-th-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.excel-table thead th.excel-th-sortable:hover {
+  color: #38bdf8;
+}
+.excel-table tbody td {
+  padding: 0.48rem 0.65rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  color: var(--ef-text, #f1f5f9);
+  vertical-align: middle;
+}
+.excel-table tbody tr:hover td {
+  background: rgba(56, 189, 248, 0.08);
+}
+.excel-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: rgba(15, 23, 42, 0.97);
+  color: #f8fafc;
+  font-weight: 800;
+  padding: 0.6rem 0.65rem;
+  border-top: 2px solid rgba(56, 189, 248, 0.45);
+  white-space: nowrap;
+}
+.excel-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.excel-num.pos { color: #22c55e; font-weight: 700; }
+.excel-num.neg { color: #f87171; font-weight: 700; }
+.excel-empty {
+  text-align: center;
+  padding: 1.6rem 1rem !important;
+  color: var(--ef-text-muted, #94a3b8);
+}
+.excel-cell-input {
+  width: 100%;
+  min-width: 82px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.28rem 0.4rem;
+  color: inherit;
+  font: inherit;
+  box-sizing: border-box;
+}
+.excel-cell-input:focus {
+  outline: none;
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+}
+.excel-row-del {
+  background: transparent;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 6px;
+}
+.excel-row-del:hover {
+  background: rgba(239, 68, 68, 0.16);
+}
+
+.fin-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.fin-badge-green { background: rgba(34, 197, 94, 0.18); color: #22c55e; }
+.fin-badge-yellow { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+.fin-badge-red { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+.fin-badge-blue { background: rgba(56, 189, 248, 0.18); color: #38bdf8; }
+
+.fin-prog {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 100px;
+}
+.fin-prog-track {
+  flex: 1;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.25);
+  overflow: hidden;
+}
+.fin-prog-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #22c55e);
+  border-radius: 999px;
+}
+
+/* Modales de Hoja (Editor de Tablas y Acciones Financieras) */
+.sheet-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  box-sizing: border-box;
+}
+.sheet-modal-card {
+  width: 100%;
+  max-width: 960px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  background: var(--ef-bg, #0f172a);
+  border: 1px solid var(--ef-surface-border, rgba(148, 163, 184, 0.28));
+  border-radius: 18px;
+  padding: 1rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.fin-form-card {
+  max-width: 480px;
+  overflow-y: auto;
+}
+.sheet-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.sheet-title-input {
+  flex: 1;
+  font-size: 1.05rem;
+  font-weight: 800;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.25rem 0.45rem;
+  color: var(--ef-text, #f8fafc);
+}
+.sheet-title-input:focus {
+  outline: none;
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+}
+.fin-quick-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.fin-quick-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ef-text-muted, #94a3b8);
+}
+.fin-quick-form input,
+.fin-quick-form select {
+  padding: 0.52rem 0.68rem;
+  border-radius: 10px;
+  border: 1px solid var(--ef-surface-border, rgba(148, 163, 184, 0.28));
+  background: var(--ef-input-bg, rgba(15, 23, 42, 0.78));
+  color: var(--ef-text, #f8fafc);
+  font-size: 0.88rem;
+}
+.fin-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+/* Tarjeta de Tabla dentro de una carpeta */
+.table-card-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.72rem 0.9rem;
+  border-radius: 14px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(37, 99, 235, 0.08));
+  margin-bottom: 0.55rem;
+}
+.table-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  cursor: pointer;
+  flex: 1;
+}
+.table-card-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--ef-text, #f8fafc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.table-card-meta {
+  font-size: 0.74rem;
+  color: var(--ef-text-muted, #94a3b8);
+}
+.table-card-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+/* Tema Claro (Light Theme) overrides */
+body.light-theme .fin-kpi,
+body.light-theme .sheet-scroll-wrap {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+body.light-theme .fin-kpi-val,
+body.light-theme .excel-table tbody td,
+body.light-theme .sheet-title-input,
+body.light-theme .table-card-title {
+  color: #0f172a;
+}
+body.light-theme .excel-table thead th {
+  background: #f1f5f9;
+  color: #334155;
+  border-bottom-color: #cbd5e1;
+}
+body.light-theme .excel-table tfoot td {
+  background: #eff6ff;
+  color: #0f172a;
+  border-top-color: #3b82f6;
+}
+body.light-theme .fin-tab,
+body.light-theme .fin-btn:not(.primary) {
+  background: #f8fafc;
+  color: #1e293b;
+  border-color: #cbd5e1;
+}
+body.light-theme .fin-filter-bar input,
+body.light-theme .fin-filter-bar select,
+body.light-theme .fin-quick-form input,
+body.light-theme .fin-quick-form select {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+body.light-theme .sheet-modal-card {
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+body.light-theme .table-card-item {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(37, 99, 235, 0.06));
+  border-color: rgba(37, 99, 235, 0.25);
+}

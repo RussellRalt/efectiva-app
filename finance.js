@@ -651,6 +651,11 @@
           global.EfectivaCloud.scheduleSave({ finance: nextState });
         }
       } catch (_) {}
+      try {
+        if (typeof global.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+          global.dispatchEvent(new CustomEvent('efectiva:finance-updated'));
+        }
+      } catch (_) {}
     });
 
     global.EfectivaFinance = {

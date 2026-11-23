@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Efectiva" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=35" />
+  <link rel="stylesheet" href="style.css?v=36" />
   <link rel="manifest" href="manifest.json" />
   <!-- Librería ligera para captura de elementos en imagen PNG HD -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -19,10 +19,10 @@
   <!-- SECCIÓN CARPETAS -->
   <section id="foldersSection">
     <header>
-      <h1 class="app-brand"><span class="app-brand-mark">E</span><span>Efectiva</span><span id="appVersionBadge" class="app-version-pill">v35</span></h1>
+      <h1 class="app-brand"><span class="app-brand-mark">E</span><span>Efectiva</span><span id="appVersionBadge" class="app-version-pill">v36</span></h1>
     </header>
 
-    <!-- Contenedor de íconos (tema, importar, papelera) -->
+    <!-- Contenedor de íconos (tema, importar, finanzas, centro de control, papelera) -->
     <div class="top-icon-bar">
       <!-- Botón de tema -->
       <button id="themeButton" class="icon-button" title="Cambiar tema">🌙</button>
@@ -34,6 +34,9 @@
         </svg>
       </label>
       <input type="file" id="importFileInput" accept="application/json" style="display: none;" />
+
+      <!-- Botón Finanzas (Vista Excel del Motor Financiero) -->
+      <button id="financeViewBtn" class="icon-button" title="Finanzas (Vista Excel)">💰</button>
 
       <!-- Botón Centro de Control (Automatizaciones, Retrasos, Memoria IA) -->
       <button id="controlCenterBtn" class="icon-button" title="Centro de Control">
@@ -83,10 +86,11 @@
     </header>
 
     <div class="tasks-container">
-      <!-- Selector Unificado de Modo de Creación (Tarea / Nota) -->
+      <!-- Selector Unificado de Modo de Creación (Tarea / Nota / Tabla / Plantillas) -->
       <div class="creation-mode-toggle">
         <button id="modeTabTask" class="mode-tab active" type="button">☑ Tarea</button>
         <button id="modeTabNote" class="mode-tab" type="button">📝 Nota</button>
+        <button id="modeTabTable" class="mode-tab" type="button">📊 Tabla</button>
         <button id="modeTabTemplates" class="mode-tab" type="button" title="Mis plantillas guardadas">📌 Plantillas</button>
       </div>
       <div id="userTemplatesPanel" class="user-templates-panel" style="display: none;"></div>
@@ -107,10 +111,19 @@
             <button id="saveNewNoteBtn" class="save-note-btn" type="button">💾 Guardar Nota</button>
           </div>
         </div>
+
+        <!-- Modo Tabla (Excel / Notion ligero) -->
+        <div id="tableCreationForm" class="new-note-form" style="display: none;">
+          <input type="text" id="newTableTitleInput" class="new-note-title" placeholder="Nombre de la tabla (ej: Inventario, Calificaciones Ineb)..." autocomplete="off" />
+          <input type="text" id="newTableColsInput" class="new-note-title" placeholder="Columnas separadas por coma (ej: Item, Cantidad, Precio, Notas)" value="Item, Cantidad, Precio, Notas" autocomplete="off" />
+          <div class="new-note-actions">
+            <button id="saveNewTableBtn" class="save-note-btn" type="button">📊 Crear y Abrir Tabla</button>
+          </div>
+        </div>
       </div>
 
-      <!-- Listado Único Unificado de Elementos (Tareas y Notas) -->
-      <h3 class="subheading">Tareas y Notas</h3>
+      <!-- Listado Único Unificado de Elementos (Tareas, Notas y Tablas) -->
+      <h3 class="subheading">Tareas, Notas y Tablas</h3>
       <div id="tasksList" class="tasks-list"></div>
 
       <!-- Mini Carpeta Fija para tareas finalizadas -->
@@ -335,14 +348,18 @@
 
   <!-- Supabase: registro, inicio de sesión y sincronización segura -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="auth.js?v=35"></script>
+  <script src="auth.js?v=36"></script>
   <!-- Sistema de modales temáticos (DEBE cargarse antes que el resto) -->
-  <script src="modals.js?v=35"></script>
+  <script src="modals.js?v=36"></script>
   <!-- Motor financiero estructurado multi-moneda (GTQ/USD en centavos) -->
-  <script src="finance.js?v=35"></script>
+  <script src="finance.js?v=36"></script>
+  <!-- Módulo de Tablas Genéricas (Excel / Notion ligero) -->
+  <script src="tables.js?v=36"></script>
+  <!-- Vista Visual tipo Excel para el Motor Financiero -->
+  <script src="finance_ui.js?v=36"></script>
   <!-- Script principal -->
-  <script src="script.js?v=35"></script>
-  <script src="ai_chat.js?v=35"></script>
+  <script src="script.js?v=36"></script>
+  <script src="ai_chat.js?v=36"></script>
   <script>
     if ('serviceWorker' in navigator) {
       const isCapacitorNative = !!(window.EfectivaAndroidBridge || (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()));
