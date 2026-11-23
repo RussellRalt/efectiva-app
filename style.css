@@ -3621,7 +3621,10 @@ body.light-theme .pres-note-drawer {
 /* === RECREACIÓN BLINDADA DE PRESENTACIÓN CON FLEXBOX PROPORCIONAL (V28) === */
 .presentation-modal {
   z-index: 10050 !important;
-  inset: 0 !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100vw !important;
   height: 100vh !important;
   height: 100dvh !important;
@@ -3631,9 +3634,50 @@ body.light-theme .pres-note-drawer {
 }
 .presentation-modal.minimized {
   z-index: 10000 !important;
-  inset: auto !important;
+  top: auto;
+  right: auto;
+  bottom: 12px;
+  left: 12px;
   width: 300px !important;
   height: 170px !important;
+  pointer-events: auto;
+}
+
+/* Botón volver a carpetas en encabezados de Carpeta y Papelera (v34) */
+.section-header-with-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  gap: 10px;
+}
+.header-back-btn {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.28);
+  color: inherit;
+  font-size: 1.2rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 20;
+  transition: transform 0.14s ease, background 0.16s ease;
+}
+.header-back-btn:active {
+  transform: translateY(-50%) scale(0.94);
+}
+body.light-theme .header-back-btn {
+  background: rgba(15, 23, 42, 0.06);
+  border-color: rgba(15, 23, 42, 0.18);
+  color: #0f172a;
 }
 .presentation-content {
   width: 100% !important;

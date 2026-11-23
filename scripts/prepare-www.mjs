@@ -5,6 +5,7 @@ const files = [
   'index.html',
   'style.css',
   'script.js',
+  'finance.js',
   'ai_chat.js',
   'modals.js',
   'auth.js',

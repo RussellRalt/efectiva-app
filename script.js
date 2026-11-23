@@ -133,6 +133,9 @@ async function initializeEfectiva() {
         userStats = Object.assign(userStats, cloudData.userStats);
         saveUserStats();
       }
+      if (cloudData.finance && window.EfectivaFinance && typeof window.EfectivaFinance.hydrateFromCloud === 'function') {
+        window.EfectivaFinance.hydrateFromCloud(cloudData.finance);
+      }
     } else {
       window.EfectivaCloud.scheduleSave({ folders, trash });
     }
@@ -144,7 +147,6 @@ async function initializeEfectiva() {
   applyTheme(currentTheme);
   renderFolders();
   cleanOldTrashItems();
-  window.addEventListener('popstate', handlePopState);
   setInterval(checkAlarms, 60 * 1000);
   restoreActivePresentationIfAny();
 }
@@ -283,251 +285,138 @@ function showConfirm(message, onConfirm, onCancel) {
 }
 
 /************************************************************************
- * HISTORIAL / NAVEGACIÓN
+ * HISTORIAL / NAVEGACIÓN UNIFICADA (v34 — SIN DUPLICADOS NI BLOQUEO PiP)
  ************************************************************************/
-window.removeEventListener('popstate', handlePopState);
-window.addEventListener('popstate', handlePopState);
+function handleAppBackAction() {
+  // 1) Cerrar modales auxiliares si hay alguno abierto
+  const aiPanel = document.getElementById('aiPanel');
+  if (aiPanel && aiPanel.classList.contains('open')) {
+    const aiClose = document.getElementById('aiCloseBtn');
+    if (aiClose) aiClose.click();
+    return true;
+  }
+  const ccModal = document.getElementById('controlCenterModal');
+  if (ccModal && ccModal.style.display === 'flex') {
+    ccModal.style.display = 'none';
+    return true;
+  }
+  if (scheduleModal && scheduleModal.style.display === 'flex') {
+    scheduleModal.style.display = 'none';
+    return true;
+  }
+  if (moveModal && moveModal.style.display === 'flex') {
+    moveModal.style.display = 'none';
+    return true;
+  }
+  if (confirmModal && confirmModal.style.display === 'flex') {
+    confirmModal.style.display = 'none';
+    return true;
+  }
+
+  // 2) Si la presentación está abierta en pantalla completa (NO minimizada), cerrarla
+  if (presentationOpen && !isPresentationMinimized) {
+    closePresentation(true);
+    return true;
+  }
+
+  // 3) Si estamos dentro de una carpeta, papelera o recompensas, volver siempre a Carpetas (con o sin PiP activo)
+  const inTasks = tasksSection && tasksSection.style.display !== 'none';
+  const inTrash = trashSection && trashSection.style.display !== 'none';
+  const inReward = rewardSection && rewardSection.style.display !== 'none';
+  if (currentFolderId || inTasks || inTrash || inReward) {
+    showFolders();
+    return true;
+  }
+  return false;
+}
 
 function handlePopState(event) {
-  console.log('popstate event:', event.state);
-  // Si la presentación está activa en pantalla grande, cerrarla y detener navegación.
+  // Si la presentación está activa en pantalla completa, cerrarla y mantener la vista actual
   if (presentationOpen && !isPresentationMinimized) {
-    console.log('Cerrando presentación por popstate');
     closePresentation(true);
-    return; // No procesar más cambios
+    return;
   }
-  // Procesa la navegación normal solo si hay un estado
   if (event.state) {
     if (event.state.rewards) {
-      showFolders();
+      openFolder(rewardsFolderId, false);
     } else if (event.state.folderId) {
       openFolder(event.state.folderId, false);
     } else if (event.state.trash) {
       showTrash(false);
+    } else {
+      showFolders();
     }
   } else {
     showFolders();
   }
 }
 
-// Aquí seguirían los demás segmentos, como CARPETAS – NAVEGACIÓN, etc.
+window.removeEventListener('popstate', handlePopState);
+window.addEventListener('popstate', handlePopState);
+
+// Botón físico / gesto Atrás nativo de Android (Capacitor 6) — nunca atrapa al usuario con PiP activo
+try {
+  const CapAppNav = window.Capacitor?.Plugins?.App;
+  if (CapAppNav && typeof CapAppNav.addListener === 'function' && !window.__efectivaBackListenerBound) {
+    window.__efectivaBackListenerBound = true;
+    CapAppNav.addListener('backButton', () => {
+      const handled = handleAppBackAction();
+      if (!handled && typeof CapAppNav.minimizeApp === 'function') {
+        CapAppNav.minimizeApp().catch(() => {});
+      }
+    });
+  }
+} catch (_) {}
+
+// Botones visuales "←" en encabezados de Carpeta y Papelera
+const backToFoldersBtnEl = document.getElementById('backToFoldersBtn');
+if (backToFoldersBtnEl) {
+  backToFoldersBtnEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showFolders();
+  });
+}
+const backFromTrashBtnEl = document.getElementById('backFromTrashBtn');
+if (backFromTrashBtnEl) {
+  backFromTrashBtnEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showFolders();
+  });
+}
+
 function showFolders() {
-  // Oculta las secciones de tareas, recompensas, agenda, alarma y papelera.
   tasksSection.style.display = 'none';
   rewardSection.style.display = 'none';
   scheduleModal.style.display = 'none';
   alarmModal.style.display = 'none';
   trashSection.style.display = 'none';
-  // Muestra la vista de carpetas.
   foldersSection.style.display = 'block';
-  // Marca que ya no estamos en una carpeta.
   currentFolderId = null;
-  // Si no hay una mini presentación activa, oculta el modal de presentación.
-  if (!isPresentationMinimized) {
+  if (!(presentationOpen && isPresentationMinimized)) {
     presentationModal.style.display = 'none';
   }
+  renderFolders();
 }
 
 function openFolder(folderId, pushToHistory = true) {
-  currentFolderId = folderId;
   const folder = folders.find(f => f.id === folderId);
   if (!folder) return;
-
-  tasksTitle.textContent = folder.name;
-  // Oculta las secciones innecesarias y muestra la vista de tareas
-  foldersSection.style.display = 'none';
-  rewardSection.style.display = 'none';
-  scheduleModal.style.display = 'none';
-  alarmModal.style.display = 'none';
-  presentationModal.style.display = 'none';
-  trashSection.style.display = 'none';
-  tasksSection.style.display = 'block';
-  renderTasks();
-
-  // Empuja el estado al historial: si es la carpeta de Recompensas, usa un estado especial
-  if (pushToHistory) {
-    if (folderId === rewardsFolderId) {
-      history.pushState({ rewards: true }, '', '');
-    } else {
-      history.pushState({ folderId }, '', '');
-    }
-  }
-}
-
-function showTrash(pushHistory = true) {
-  // Oculta todas las secciones excepto la de la papelera.
-  foldersSection.style.display = 'none';
-  tasksSection.style.display = 'none';
-  rewardSection.style.display = 'none';
-  scheduleModal.style.display = 'none';
-  alarmModal.style.display = 'none';
-  presentationModal.style.display = 'none';
-  trashSection.style.display = 'block';
-  renderTrash();
-  if (pushHistory) {
-    history.pushState({ trash: true }, '', '');
-  }
-}
-
-/************************************************************************
- * CARPETAS – NAVEGACIÓN
- ************************************************************************/
-function showFolders() {
-  // Se ocultan las vistas de tareas, recompensas, agenda, alarma, papelera…
-  tasksSection.style.display = 'none';
-  rewardSection.style.display = 'none';
-  scheduleModal.style.display = 'none';
-  alarmModal.style.display = 'none';
-  trashSection.style.display = 'none';
-  // Se muestra la vista de carpetas
-  foldersSection.style.display = 'block';
-  // Se marca que ya no estamos en una carpeta
-  currentFolderId = null;
-  // Si NO hay una mini presentación activa, se oculta el modal de presentación.
-  if (!isPresentationMinimized) {
-    presentationModal.style.display = 'none';
-  }
-}
-
-function openFolder(folderId, pushToHistory = true) {
   currentFolderId = folderId;
-  const folder = folders.find(f => f.id === folderId);
-  if (!folder) return;
 
   tasksTitle.textContent = folder.name;
-  // Ocultamos la vista de carpetas y mostramos la vista de tareas
   foldersSection.style.display = 'none';
   rewardSection.style.display = 'none';
   scheduleModal.style.display = 'none';
   alarmModal.style.display = 'none';
 
-  /* Si hay una presentación activa y está en modo minimizado (mini presentación),
-     se deja visible; en caso contrario se oculta. */
-  if (!presentationOpen || (presentationOpen && !isPresentationMinimized)) {
+  // Si hay PiP minimizado activo, mantenerlo visible; de lo contrario ocultar el modal
+  if (!(presentationOpen && isPresentationMinimized)) {
     presentationModal.style.display = 'none';
   }
 
   trashSection.style.display = 'none';
   tasksSection.style.display = 'block';
-  renderTasks();
 
-  // Empujamos el estado de la carpeta al historial, sin excluir ninguna carpeta (incluso la de recompensas)
-  if (pushToHistory) {
-    history.pushState({ folderId: folderId }, '', '');
-  }
-}
-
-/************************************************************************
- * CARPETAS – NAVEGACIÓN
- ************************************************************************/
-function showFolders() {
-  // Oculta las secciones de tareas, recompensas, agenda, alarma y papelera.
-  tasksSection.style.display = 'none';
-  rewardSection.style.display = 'none';
-  scheduleModal.style.display = 'none';
-  alarmModal.style.display = 'none';
-  trashSection.style.display = 'none';
-  // Muestra la vista de carpetas.
-  foldersSection.style.display = 'block';
-  // Marca que ya no estamos en una carpeta.
-  currentFolderId = null;
-  // Si no hay una mini presentación activa, oculta el modal de presentación.
-  if (!isPresentationMinimized) {
-    presentationModal.style.display = 'none';
-  }
-}
-
-function openFolder(folderId, pushToHistory = true) {
-  currentFolderId = folderId;
-  const folder = folders.find(f => f.id === folderId);
-  if (!folder) return;
-
-  tasksTitle.textContent = folder.name;
-  // Oculta la vista de carpetas y muestra la vista de tareas.
-  foldersSection.style.display = 'none';
-  rewardSection.style.display = 'none';
-  scheduleModal.style.display = 'none';
-  alarmModal.style.display = 'none';
-
-  /* Si hay una presentación activa y está en modo minimizado (mini presentación),
-     la dejamos visible; de lo contrario se oculta. */
-  if (!presentationOpen || (presentationOpen && !isPresentationMinimized)) {
-    presentationModal.style.display = 'none';
-  }
-
-  trashSection.style.display = 'none';
-  tasksSection.style.display = 'block';
-  renderTasks();
-
-  // Empuja el estado de la carpeta al historial.
-  // Para la carpeta de recompensas, se marca un estado especial (rewards: true)
-  if (pushToHistory) {
-    if (folderId === rewardsFolderId) {
-      history.pushState({ rewards: true }, '', '');
-    } else {
-      history.pushState({ folderId }, '', '');
-    }
-  }
-}
-
-function showTrash(pushHistory = true) {
-  // Oculta todas las secciones excepto la de la papelera.
-  foldersSection.style.display = 'none';
-  tasksSection.style.display = 'none';
-  rewardSection.style.display = 'none';
-  scheduleModal.style.display = 'none';
-  alarmModal.style.display = 'none';
-  presentationModal.style.display = 'none';
-  trashSection.style.display = 'block';
-  renderTrash();
-  if (pushHistory) {
-    history.pushState({ trash: true }, '', '');
-  }
-}
-
-/************************************************************************
- * CARPETAS
- ************************************************************************/
-// ... Funciones existentes como createFolder, renderFolders, toggleFolderDropdownMenu, etc.
-
-function showFolders() {
-  // Se ocultan las vistas de tareas, recompensas, agenda, alarma, papelera…
-  tasksSection.style.display = 'none';
-  rewardSection.style.display = 'none';
-  scheduleModal.style.display = 'none';
-  alarmModal.style.display = 'none';
-  trashSection.style.display = 'none';
-  // Se muestra la vista de carpetas
-  foldersSection.style.display = 'block';
-  // Se marca que ya no estamos en una carpeta
-  currentFolderId = null;
-  // Si NO hay una mini presentación activa, se oculta el modal de presentación.
-  if (!isPresentationMinimized) {
-    presentationModal.style.display = 'none';
-  }
-}
-
-function openFolder(folderId, pushToHistory = true) {
-  currentFolderId = folderId;
-  const folder = folders.find(f => f.id === folderId);
-  if (!folder) return;
-
-  tasksTitle.textContent = folder.name;
-  // Ocultamos la vista de carpetas y mostramos la vista de tareas
-  foldersSection.style.display = 'none';
-  rewardSection.style.display = 'none';
-  scheduleModal.style.display = 'none';
-  alarmModal.style.display = 'none';
-
-  /* Si hay una presentación activa y está en modo minimizado (mini presentación),
-     se deja visible; en caso contrario se oculta. */
-  if (!presentationOpen || (presentationOpen && !isPresentationMinimized)) {
-    presentationModal.style.display = 'none';
-  }
-
-  trashSection.style.display = 'none';
-  tasksSection.style.display = 'block';
-  // NUEVO: ajustar placeholders según la carpeta
   if (folderId === rewardsFolderId) {
     if (newTaskInput) newTaskInput.placeholder = 'Describe tu recompensa (Enter)...';
     if (newTaskTimeInput) newTaskTimeInput.placeholder = 'Tiempo en min (opcional)';
@@ -537,13 +426,30 @@ function openFolder(folderId, pushToHistory = true) {
   }
   renderTasks();
 
-  // Empujamos el estado de la carpeta al historial para que el botón "atrás" nos permita salir
-  if (pushToHistory && !presentationOpen) { // Evita cambiar el historial si se está en presentación
+  // FIX v34: empujar al historial también cuando el PiP está minimizado (solo evitarlo en pantalla completa)
+  if (pushToHistory && (!presentationOpen || isPresentationMinimized)) {
     if (folderId === rewardsFolderId) {
       history.pushState({ rewards: true }, '', '');
     } else {
-      history.pushState({ folderId: folderId }, '', '');
+      history.pushState({ folderId }, '', '');
     }
+  }
+}
+
+function showTrash(pushHistory = true) {
+  foldersSection.style.display = 'none';
+  tasksSection.style.display = 'none';
+  rewardSection.style.display = 'none';
+  scheduleModal.style.display = 'none';
+  alarmModal.style.display = 'none';
+  if (!(presentationOpen && isPresentationMinimized)) {
+    presentationModal.style.display = 'none';
+  }
+  trashSection.style.display = 'block';
+  currentFolderId = null;
+  renderTrash();
+  if (pushHistory && (!presentationOpen || isPresentationMinimized)) {
+    history.pushState({ trash: true }, '', '');
   }
 }
 
@@ -724,21 +630,7 @@ function toggleFolderDropdownMenu(folderId) {
   }
 }
 
-window.addEventListener('popstate', (event) => {
-  if (event.state) {
-    // Si se detecta el estado especial de Recompensas, se vuelve a la vista de carpetas
-    if (event.state.rewards) {
-      showFolders();
-    } else if (event.state.folderId) {
-      openFolder(event.state.folderId, false);
-    } else if (event.state.trash) {
-      showTrash(false);
-    }
-  } else {
-    // Por defecto, mostrar la vista de carpetas
-    showFolders();
-  }
-});
+// [v34: eliminado listener popstate anónimo duplicado — manejado exclusivamente por handlePopState]
 
 
 function renameFolder(folder) {
@@ -1877,8 +1769,8 @@ function updateAppVersionBadge() {
   try {
     const el = document.getElementById('appVersionBadge');
     if (!el) return;
-    el.textContent = 'v33 · 🔊';
-    el.title = 'Efectiva v33 — Voz Neural OTA activa';
+    el.textContent = 'v34 · 🔊';
+    el.title = 'Efectiva v34 — PiP blindado, Memoria por Nodos y Motor Financiero';
   } catch (_) {}
 }
 setTimeout(updateAppVersionBadge, 150);
@@ -2575,8 +2467,17 @@ function triggerAutomationEvent(eventType, payload) {
   });
 }
 
+function dedupeTaskAcrossFolders(taskId) {
+  if (!taskId || !Array.isArray(folders)) return;
+  folders.forEach(f => {
+    if (Array.isArray(f.tasks)) f.tasks = f.tasks.filter(t => t && t.id !== taskId);
+    if (Array.isArray(f.finished)) f.finished = f.finished.filter(t => t && t.id !== taskId);
+  });
+}
+window.dedupeTaskAcrossFolders = dedupeTaskAcrossFolders;
+
 function moveTaskToMiniFolder(folder, task) {
-  folder.tasks = folder.tasks.filter(t => t.id !== task.id);
+  dedupeTaskAcrossFolders(task.id);
   // FIX: si la carpeta no tiene array "finished" (datos legacy o importados), inicializarlo
   if (!Array.isArray(folder.finished)) folder.finished = [];
 
@@ -2608,10 +2509,8 @@ function restoreFromMiniFolder(folder, taskId) {
   const idx = folder.finished.findIndex(t => t.id === taskId);
   if (idx === -1) return;
   const t = folder.finished[idx];
-  // Reiniciar el índice de paso y cualquier otro estado relacionado
   t.currentStepIndex = 0;
-  // ...posible reinicio de otros estados de pasos si fuese necesario...
-  folder.finished.splice(idx, 1);
+  dedupeTaskAcrossFolders(taskId);
   folder.tasks.push(t);
   saveDataToLocalStorage();
   renderTasks();
@@ -5245,6 +5144,7 @@ window.EfectivaStateBridge = {
       userTemplates: Array.isArray(userTemplates) ? userTemplates : [],
       automationRules: Array.isArray(automationRules) ? automationRules : [],
       agentMemory,
+      finance: (window.EfectivaFinance && typeof window.EfectivaFinance.exportState === 'function') ? window.EfectivaFinance.exportState() : null,
       userStats: userStats || { xp_total: 0, nivel: 1, racha_dias_consecutivos: 1 },
       currentFolderId: (typeof currentFolderId !== 'undefined') ? currentFolderId : null,
       activePresentation,
@@ -5279,6 +5179,9 @@ window.EfectivaStateBridge = {
     }
     if (Array.isArray(nextState.agentMemory)) {
       try { localStorage.setItem('efectivaAgentMemoryV1', JSON.stringify(nextState.agentMemory)); } catch (_) {}
+    }
+    if (nextState.finance && window.EfectivaFinance && typeof window.EfectivaFinance.hydrateFromCloud === 'function') {
+      window.EfectivaFinance.hydrateFromCloud(nextState.finance);
     }
     if (nextState.userStats && typeof nextState.userStats === 'object') {
       userStats = Object.assign(userStats, nextState.userStats);

@@ -33,6 +33,7 @@ interface AppState {
   userTemplates: any[];
   automationRules: any[];
   agentMemory: any[];
+  finance?: any;
   userStats: {
     xp_total: number;
     nivel: number;
@@ -1465,6 +1466,7 @@ async function saveCloudJobToUserData(
     currentData.userTemplates = mutatedState.userTemplates;
     currentData.automationRules = mutatedState.automationRules;
     currentData.agentMemory = mutatedState.agentMemory;
+    if (mutatedState.finance) currentData.finance = mutatedState.finance;
     currentData.userStats = mutatedState.userStats;
   }
 
@@ -1720,6 +1722,7 @@ Deno.serve(async (req: Request) => {
     userTemplates: Array.isArray(rawState.userTemplates) ? rawState.userTemplates : [],
     automationRules: Array.isArray(rawState.automationRules) ? rawState.automationRules : [],
     agentMemory: Array.isArray(rawState.agentMemory) ? rawState.agentMemory : [],
+    finance: rawState.finance && typeof rawState.finance === 'object' ? rawState.finance : null,
     userStats: rawState.userStats || { xp_total: 0, nivel: 1, racha_dias_consecutivos: 1 },
     currentFolderId: rawState.currentFolderId || null,
     activePresentation: rawState.activePresentation || null,

@@ -1,8 +1,9 @@
-const CACHE = 'efectiva-v33';
+const CACHE = 'efectiva-v34';
 const APP_SHELL = [
   './',
   './index.html',
   './style.css',
+  './finance.js',
   './script.js',
   './ai_chat.js',
   './modals.js',

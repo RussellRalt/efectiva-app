@@ -52,27 +52,61 @@
       prompt: 'Exportá todas mis carpetas y tareas en formato JSON legible.', isDefault: true }
   ];
 
-  const SYSTEM_PROMPT = `Sos el Copiloto Proactivo de "Efectiva / ASISTA MULTY", con CONTROL TOTAL sobre la app, memoria persistente entre sesiones y acceso a investigación web.
+  const SYSTEM_PROMPT = `Sos el Copiloto Proactivo de "Efectiva / ASISTA MULTY", con control total sobre tareas, memoria por nodos/grados y motor financiero multi-moneda (GTQ/USD).
 
-ESTRUCTURA Y CAPACIDADES QUE TENÉS HOY (v14):
-1. **Control Atómico y Presentación en Vivo**: Podés crear/editar tareas completas en 1 llamada (\`guardar_tarea_completa\`), distribuir minutos por paso (\`asignar_tiempos_pasos\`), iniciar presentaciones (\`iniciar_presentacion_tarea\`), registrar/justificar retrasos en números rojos (\`registrar_retraso_paso\`) y silenciar alarmas.
-2. **Memoria Persistente a Largo Plazo**: Tenés memoria propia (\`guardar_memoria_usuario\`, \`consultar_memoria_usuario\`, \`eliminar_memoria_usuario\`) que se inyecta automáticamente al inicio de cada conversación. Guardá ahí patrones de tiempo del usuario, horarios de máxima energía, motivos frecuentes de retraso, preferencias y metas cuadridimensionales (cuerpo, mente, emociones, espíritu).
-3. **Motor GPS y Analítica Real**: Si el usuario se atrasa, usá \`recalcular_agenda_dia\` para recorrer automáticamente las reglas \`hora_programada\` restantes del día. Usá \`analizar_patrones_rendimiento\` para detectar dónde subestima tiempos y qué causas de retraso se repiten.
-4. **Ojos al Exterior (Web Research Open-Source)**: Tenés \`buscar_web\` (búsqueda en línea en vivo) y \`leer_url_web\` (vía Jina Reader para leer páginas limpias en Markdown) con opción de guardar automáticamente la investigación en una Nota vinculada a una tarea (\`tarea_id\`).
-5. **Plantillas, Notas y Reglas Operativas**: Podés crear/editar plantillas de usuario, notas (\`crear_nota\`, \`editar_nota\`) y automatizaciones por \`paso_completado\`, \`tiempo_paso_agotado\`, \`hora_programada\`, \`tarea_completada\` y \`carpeta_completada\`.
-
-COMPORTAMIENTO PROACTIVO ESPERADO:
-- Usá SIEMPRE las tools reales antes de afirmar un cambio o dato.
-- Cuando el usuario te cuente una preferencia, horario ideal o patrón importante, guardalo proactivamente con \`guardar_memoria_usuario\` sin que tenga que pedírtelo.
-- Cuando veas retrasos o una tarea de investigación pendiente, ofrecé o ejecutá proactivamente el pre-trabajo (investigar con \`buscar_web\` y dejar una Nota lista) o el reajuste GPS (\`recalcular_agenda_dia\`).
-- Si detectás fricciones o oportunidades concretas de mejora en el ecosistema de Efectiva, aportá ideas accionables basadas en tu experiencia real usando las tools.`;
+REGLAS DE EFICIENCIA (OBLIGATORIAS):
+1. **Lectura Lazy Loading**: Usá \`obtener_estado()\` en modo "resumen" (por defecto) y bajá a detalle solo lo necesario con \`obtener_carpeta\`, \`obtener_tarea\` o \`leer_nota\`. Para editar notas existentes preferí \`parchear_nota\` (append/prepend/reemplazar_seccion) en lugar de reenviar documentos enteros.
+2. **Memoria por Nodos y Grados**:
+   - Grado 0 (Núcleo, ≤8 registros breves): reglas globales siempre visibles.
+   - Grado 1 (Nodos de dominio: \`finanzas\`, \`metas\`, \`ineb\`, \`iglesia\`, \`proyectos\`, \`hogar\`, \`investigacion\`): cargalos bajo demanda con \`cargar_nodo_memoria(nodo, grado_maximo=1)\`.
+   - Grado 2 (Histórico detallado): solo con \`buscar_memoria_relevante\` o \`grado_maximo=2\`.
+3. **Motor Financiero Estructurado (GTQ / USD)**: Para cuentas, movimientos, transferencias, deudas, por cobrar, inversiones (provee vs drena) y arqueos, usá SIEMPRE las tools \`fin_*\` (\`fin_obtener_resumen\`, \`fin_gestionar_cuenta\`, \`fin_registrar_movimiento\`, \`fin_gestionar_compromiso\`, \`fin_gestionar_inversion\`, \`fin_conciliar_arqueo\`, \`fin_exportar_a_nota\`) — el código calcula al centavo exacto sin reescribir notas Markdown.
+4. **Control Operativo y Proactividad**: Usá \`guardar_tarea_completa\` (soporta minutos decimales exactos ej. 1.5 min = 90s), \`recalcular_agenda_dia\`, \`analizar_patrones_rendimiento\` (con filtros \`fecha_desde\`/\`fecha_hasta\`), \`buscar_web\` y \`leer_url_web\`. Confirmá siempre tus cambios con tools reales antes de responder.`;
 
   // --------------------------------------------------------------------------
   //  TOOL DEFINITIONS
   // --------------------------------------------------------------------------
   const TOOLS = [
     { type: 'function', function: { name: 'obtener_estado',
-      description: 'Devuelve el estado completo de la app.', parameters: { type: 'object', properties: {}, required: [] } } },
+      description: 'Devuelve el estado de la app. Por defecto en modo "resumen" (ultraligero: solo carpetas y tareas activas sin pasos ni completadas).',
+      parameters: {
+        type: 'object',
+        properties: {
+          modo: { type: 'string', description: 'resumen (default) | completo' },
+          incluir_completadas: { type: 'boolean', description: 'Default false' },
+          incluir_pasos: { type: 'boolean', description: 'Default false' }
+        },
+        required: []
+      } } },
+    { type: 'function', function: { name: 'obtener_carpeta',
+      description: 'Lectura granular Grado 2: devuelve solo una carpeta específica con sus tareas.',
+      parameters: {
+        type: 'object',
+        properties: {
+          carpeta_id: { type: 'string' },
+          incluir_completadas: { type: 'boolean', description: 'Default false' },
+          incluir_pasos: { type: 'boolean', description: 'Default false' }
+        },
+        required: ['carpeta_id']
+      } } },
+    { type: 'function', function: { name: 'obtener_tarea',
+      description: 'Lectura granular Grado 2: devuelve el detalle completo de una sola tarea (pasos, tiempos exactos en seg/min y delayLogs).',
+      parameters: { type: 'object', properties: { tarea_id: { type: 'string' } }, required: ['tarea_id'] } } },
+    { type: 'function', function: { name: 'leer_nota',
+      description: 'Lectura granular Grado 2: devuelve el contenido completo de una sola nota por su ID.',
+      parameters: { type: 'object', properties: { nota_id: { type: 'string' } }, required: ['nota_id'] } } },
+    { type: 'function', function: { name: 'parchear_nota',
+      description: 'Edita una nota existente sin reenviar todo el documento (append, prepend o reemplazar_seccion Markdown).',
+      parameters: {
+        type: 'object',
+        properties: {
+          nota_id: { type: 'string' },
+          modo: { type: 'string', description: 'append | prepend | reemplazar_seccion' },
+          texto: { type: 'string' },
+          encabezado_objetivo: { type: ['string', 'null'], description: 'Título de sección Markdown para reemplazar_seccion (ej: "## Deudas" o "Deudas")' }
+        },
+        required: ['nota_id', 'modo', 'texto']
+      } } },
     { type: 'function', function: { name: 'crear_carpeta',
       description: 'Crea una carpeta nueva.',
       parameters: { type: 'object', properties: { nombre: { type: 'string' } }, required: ['nombre'] } } },
@@ -229,8 +263,16 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       description: 'Busca rápido tareas, carpetas o pasos por palabra clave o prioridad.',
       parameters: { type: 'object', properties: { criterio: { type: 'string' } }, required: ['criterio'] } } },
     { type: 'function', function: { name: 'obtener_reporte_productividad',
-      description: 'Genera métricas y reporte de productividad global o por carpeta.',
-      parameters: { type: 'object', properties: { carpeta_id: { type: ['string', 'null'] } }, required: [] } } },
+      description: 'Genera métricas y reporte de productividad global o por carpeta, con filtros opcionales de fecha.',
+      parameters: {
+        type: 'object',
+        properties: {
+          carpeta_id: { type: ['string', 'null'] },
+          fecha_desde: { type: ['string', 'null'], description: 'YYYY-MM-DD' },
+          fecha_hasta: { type: ['string', 'null'], description: 'YYYY-MM-DD' }
+        },
+        required: []
+      } } },
     { type: 'function', function: { name: 'ejecutar_accion_en_lote',
       description: 'Aplica una acción en masa (marcar_completada, eliminar, cambiar_prioridad, cambiar_color, mover) sobre múltiples tareas.',
       parameters: {
@@ -340,8 +382,16 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
         required: ['titulo', 'contenido']
       } } },
     { type: 'function', function: { name: 'listar_notas',
-      description: 'Lista las notas guardadas opcionalmente filtrando por carpeta o tarea.',
-      parameters: { type: 'object', properties: { carpeta_id: { type: ['string', 'null'] }, tarea_id: { type: ['string', 'null'] } }, required: [] } } },
+      description: 'Lista notas guardadas. Por defecto incluir_contenido=false (solo metadata y preview de 120 chars para ahorrar tokens).',
+      parameters: {
+        type: 'object',
+        properties: {
+          carpeta_id: { type: ['string', 'null'] },
+          tarea_id: { type: ['string', 'null'] },
+          incluir_contenido: { type: 'boolean', description: 'Default false' }
+        },
+        required: []
+      } } },
     { type: 'function', function: { name: 'eliminar_nota',
       description: 'Elimina una nota existente por su ID.',
       parameters: { type: 'object', properties: { nota_id: { type: 'string' } }, required: ['nota_id'] } } },
@@ -384,23 +434,39 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       description: 'Obtiene las estadísticas de XP total, nivel actual y racha de días consecutivos del usuario.',
       parameters: { type: 'object', properties: {}, required: [] } } },
     { type: 'function', function: { name: 'guardar_memoria_usuario',
-      description: 'Guarda un recuerdo persistente en 2 capas: es_nucleo=true (máx 8 hechos vitales siempre visibles) o es_nucleo=false (archivo histórico de 0 tokens recuperable con buscar_memoria_relevante).',
+      description: 'Guarda un recuerdo en el grafo de 3 grados: grado 0 (Núcleo, ≤8 reglas globales), grado 1 (Nodo de dominio: finanzas, metas, ineb, iglesia, proyectos, hogar, investigacion), grado 2 (histórico detallado).',
       parameters: {
         type: 'object',
         properties: {
-          categoria: { type: 'string', description: 'patrones_tiempo | energia_horarios | motivos_retraso | preferencias | cuadridimensional | proyecto' },
+          categoria: { type: 'string', description: 'Categoría o dominio' },
+          nodo: { type: 'string', description: 'Dominio del nodo: finanzas | metas | ineb | iglesia | proyectos | hogar | investigacion | general' },
+          grado: { type: 'integer', description: '0 (Núcleo) | 1 (Resumen de dominio) | 2 (Histórico profundo)' },
           clave: { type: 'string', description: 'Identificador corto único' },
-          valor: { type: 'string', description: 'Información aprendida' },
-          es_nucleo: { type: 'boolean', description: 'true = Capa 1 Núcleo (siempre visible); false = Capa 2 Archivo (0 tokens hasta consultarlo)' }
+          valor: { type: 'string', description: 'Información completa' },
+          resumen_corto: { type: 'string', description: 'Resumen <=200 chars para carga barata' },
+          conexiones: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                tipo: { type: 'string', description: 'carpeta | tarea | nota | regla | memoria' },
+                id: { type: 'string' },
+                relacion: { type: 'string' }
+              }
+            }
+          },
+          es_nucleo: { type: 'boolean', description: 'Compatibilidad: true equivale a grado 0' }
         },
-        required: ['categoria', 'clave', 'valor']
+        required: ['clave', 'valor']
       } } },
     { type: 'function', function: { name: 'buscar_memoria_relevante',
-      description: 'Busca en la memoria histórica (Capa 1 + Capa 2) solo los recuerdos relevantes para la consulta actual (ahorra tokens).',
+      description: 'Busca en la memoria histórica (Grado 0, 1 y 2) solo los recuerdos relevantes para la consulta actual.',
       parameters: {
         type: 'object',
         properties: {
           consulta: { type: 'string', description: 'Tema, proyecto o palabra clave a recordar' },
+          nodo: { type: ['string', 'null'], description: 'Filtrar opcionalmente por nodo de dominio' },
+          grado_maximo: { type: ['integer', 'null'], description: 'Opcional: 0, 1 o 2 (default 2)' },
           top_k: { type: 'integer', description: 'Máximo de recuerdos a traer (default 5)' }
         },
         required: ['consulta']
@@ -425,8 +491,15 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
         required: ['minutos_retraso']
       } } },
     { type: 'function', function: { name: 'analizar_patrones_rendimiento',
-      description: 'Analiza el historial real de retrasos (delayLogs), tiempos reales vs estimados y recomienda ajustes.',
-      parameters: { type: 'object', properties: {}, required: [] } } },
+      description: 'Analiza retrasos (delayLogs) y tiempos reales vs estimados, opcionalmente acotado por fecha_desde / fecha_hasta.',
+      parameters: {
+        type: 'object',
+        properties: {
+          fecha_desde: { type: ['string', 'null'], description: 'YYYY-MM-DD' },
+          fecha_hasta: { type: ['string', 'null'], description: 'YYYY-MM-DD' }
+        },
+        required: []
+      } } },
     { type: 'function', function: { name: 'buscar_web',
       description: 'Busca información actualizada en la web en tiempo real y opcionalmente la guarda en una Nota vinculada.',
       parameters: {
@@ -453,95 +526,226 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       } } },
     { type: 'function', function: { name: 'configurar_audio_coach',
       description: 'Activa o desactiva la síntesis de voz en voz alta durante las rutinas / playlist.',
-      parameters: { type: 'object', properties: { habilitado: { type: 'boolean' }, anunciar_pasos: { type: 'boolean' } }, required: ['habilitado'] } } }
+      parameters: { type: 'object', properties: { habilitado: { type: 'boolean' }, anunciar_pasos: { type: 'boolean' } }, required: ['habilitado'] } } },
+    { type: 'function', function: { name: 'cargar_nodo_memoria',
+      description: 'Carga bajo demanda (<400 tokens) el resumen de un nodo de dominio (ej. finanzas, metas, ineb, iglesia, proyectos, hogar, investigacion) y sus IDs conectados.',
+      parameters: {
+        type: 'object',
+        properties: {
+          nodo: { type: 'string', description: 'Nombre del nodo de dominio' },
+          grado_maximo: { type: 'integer', description: '0, 1 (default) o 2' }
+        },
+        required: ['nodo']
+      } } },
+    { type: 'function', function: { name: 'fin_gestionar_cuenta',
+      description: 'Motor financiero (GTQ/USD en centavos): crea, actualiza, ajusta saldo o lista cuentas (banco, billetera_fisica, crypto, reserva).',
+      parameters: {
+        type: 'object',
+        properties: {
+          accion: { type: 'string', description: 'crear | actualizar | ajustar_saldo | listar' },
+          cuenta_id: { type: ['string', 'null'] },
+          nombre: { type: 'string' },
+          tipo: { type: 'string', description: 'banco | billetera_fisica | crypto | reserva' },
+          moneda: { type: 'string', description: 'GTQ | USD' },
+          saldo_inicial: { type: 'number' },
+          saldo_actual: { type: 'number' },
+          notas: { type: 'string' }
+        },
+        required: ['accion']
+      } } },
+    { type: 'function', function: { name: 'fin_registrar_movimiento',
+      description: 'Registra ingreso, egreso, transferencia, pago_deuda, cobro, aporte_inversion o retorno_inversion actualizando saldos exactos al centavo.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tipo: { type: 'string', description: 'ingreso | egreso | transferencia | pago_deuda | cobro | aporte_inversion | retorno_inversion' },
+          monto: { type: 'number' },
+          moneda: { type: 'string', description: 'GTQ | USD' },
+          cuenta_id: { type: 'string' },
+          cuenta_destino_id: { type: ['string', 'null'] },
+          monto_destino: { type: ['number', 'null'] },
+          tipo_cambio_usd_gtq: { type: ['number', 'null'] },
+          categoria: { type: 'string' },
+          descripcion: { type: 'string' },
+          fecha_iso: { type: ['string', 'null'], description: 'YYYY-MM-DD' },
+          tarea_id: { type: ['string', 'null'] },
+          referencia_entidad_id: { type: ['string', 'null'], description: 'ID de compromiso o inversión' }
+        },
+        required: ['tipo', 'monto', 'cuenta_id']
+      } } },
+    { type: 'function', function: { name: 'fin_gestionar_compromiso',
+      description: 'Gestiona cuentas por pagar (deudas) o por cobrar en GTQ/USD.',
+      parameters: {
+        type: 'object',
+        properties: {
+          accion: { type: 'string', description: 'crear | actualizar | listar | eliminar' },
+          compromiso_id: { type: ['string', 'null'] },
+          tipo: { type: 'string', description: 'por_pagar | por_cobrar' },
+          contraparte: { type: 'string' },
+          concepto: { type: 'string' },
+          monto_total: { type: 'number' },
+          saldo_pendiente: { type: 'number' },
+          moneda: { type: 'string', description: 'GTQ | USD' },
+          cuota_mensual: { type: ['number', 'null'] },
+          dia_corte: { type: ['integer', 'null'] },
+          fecha_limite: { type: ['string', 'null'] },
+          estado: { type: 'string' }
+        },
+        required: []
+      } } },
+    { type: 'function', function: { name: 'fin_gestionar_inversion',
+      description: 'Gestiona inversiones/empresas/plataformas y calcula automáticamente flujo_neto, roi_porcentaje y clasificación (provee | equilibrio | drena).',
+      parameters: {
+        type: 'object',
+        properties: {
+          accion: { type: 'string', description: 'crear | actualizar | listar | eliminar' },
+          inversion_id: { type: ['string', 'null'] },
+          nombre: { type: 'string' },
+          moneda: { type: 'string', description: 'GTQ | USD' },
+          capital_invertido: { type: 'number' },
+          retornos_acumulados: { type: 'number' },
+          costos_acumulados: { type: 'number' },
+          estado: { type: 'string', description: 'activa | pausada | cerrada' }
+        },
+        required: []
+      } } },
+    { type: 'function', function: { name: 'fin_conciliar_arqueo',
+      description: 'Compara el saldo contado real de una cuenta contra el calculado y opcionalmente crea ajuste_conciliacion exacto al centavo.',
+      parameters: {
+        type: 'object',
+        properties: {
+          cuenta_id: { type: 'string' },
+          saldo_contado_real: { type: 'number' },
+          crear_ajuste: { type: 'boolean' },
+          descripcion: { type: 'string' }
+        },
+        required: ['cuenta_id', 'saldo_contado_real']
+      } } },
+    { type: 'function', function: { name: 'fin_obtener_resumen',
+      description: 'Resumen financiero compacto (<250 tokens): liquidez por moneda/tipo, deudas, por cobrar, posición neta, flujo del mes, inversiones (provee vs drena) y últimos N movimientos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          moneda_vista: { type: ['string', 'null'], description: 'GTQ | USD para consolidado' },
+          incluir_movimientos_recientes: { type: 'integer', description: 'Default 5' },
+          incluir_deudas: { type: 'boolean', description: 'Default true' },
+          incluir_inversiones: { type: 'boolean', description: 'Default true' },
+          tipo_cambio_usd_gtq: { type: ['number', 'null'] }
+        },
+        required: []
+      } } },
+    { type: 'function', function: { name: 'fin_exportar_a_nota',
+      description: 'Genera un snapshot legible en Markdown del estado financiero y lo guarda como una Nota.',
+      parameters: {
+        type: 'object',
+        properties: {
+          titulo: { type: 'string' },
+          carpeta_id: { type: ['string', 'null'] },
+          tipo_cambio_usd_gtq: { type: ['number', 'null'] }
+        },
+        required: []
+      } } }
   ];
 
   // --------------------------------------------------------------------------
-  //  STATE HELPERS
+  //  STATE HELPERS (v34 — COMPACT LAZY LOADING & EXACT DECIMAL MINUTES)
   // --------------------------------------------------------------------------
-  function getStateSnapshot() {
+  function secToMinExact(sec) {
+    const n = Number(sec);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return Math.round((n / 60) * 100) / 100;
+  }
+
+  function serializeStepsUnified(t, forceCompleted = false) {
+    const curIdx = t.currentStepIndex || 0;
+    return (t.steps || []).map((s, idx) => {
+      const seg = (Array.isArray(t.stepTimes) && typeof t.stepTimes[idx] === 'number') ? Math.round(t.stepTimes[idx]) : 0;
+      return {
+        i: idx,
+        texto: (typeof s === 'string') ? s : (s && (s.text || s.texto || s.descripcion) ? String(s.text || s.texto || s.descripcion) : ''),
+        min: seg > 0 ? secToMinExact(seg) : null,
+        seg: seg > 0 ? seg : null,
+        ok: forceCompleted ? true : ((typeof s === 'object' && s !== null && typeof s.completed === 'boolean') ? s.completed : (idx < curIdx))
+      };
+    });
+  }
+
+  function serializeTaskForAI(t, incluirPasos = false, isCompleted = false) {
+    const base = {
+      id: t.id,
+      nombre: t.name,
+      prioridad: t.priority || null,
+      fecha_vencimiento: t.dueDate || null,
+      etiquetas: Array.isArray(t.tags) ? t.tags : [],
+      tiempo_minutos: t.totalTime ? secToMinExact(t.totalTime) : (t.rewardTime || null),
+      cantidad_pasos: Array.isArray(t.steps) ? t.steps.length : 0,
+      cantidad_retrasos: Array.isArray(t.delayLogs) ? t.delayLogs.length : 0
+    };
+    if (t.isReward) base.es_recompensa = true;
+    if (isCompleted && t.completedAt) base.fecha_completada = t.completedAt;
+    if (incluirPasos) {
+      base.tiempo_total_segundos = t.totalTime ? Math.round(t.totalTime) : null;
+      base.tiempo_real_min = t.actualTimeMinutes || null;
+      base.color = t.color || null;
+      base.pasos = serializeStepsUnified(t, isCompleted);
+      if (Array.isArray(t.delayLogs) && t.delayLogs.length > 0) base.retrasos = t.delayLogs;
+    }
+    return base;
+  }
+
+  function serializeFolderForAI(f, incluirCompletadas = false, incluirPasos = false) {
+    const out = {
+      id: f.id,
+      nombre: f.name,
+      es_recompensas: !!f.isDefaultRewards,
+      cantidad_tareas: (f.tasks || []).length,
+      cantidad_completadas: (f.finished || []).length,
+      tareas: (f.tasks || []).map(t => serializeTaskForAI(t, incluirPasos, false))
+    };
+    if (incluirCompletadas) {
+      out.tareas_completadas = (f.finished || []).map(t => serializeTaskForAI(t, incluirPasos, true));
+    }
+    return out;
+  }
+
+  function getStateSnapshot(opts = {}) {
+    const modo = String(opts.modo || 'resumen').toLowerCase();
+    const isFull = modo === 'completo';
+    const incluirCompletadas = opts.incluir_completadas !== undefined ? !!opts.incluir_completadas : isFull;
+    const incluirPasos = opts.incluir_pasos !== undefined ? !!opts.incluir_pasos : isFull;
+
     const activePres = (typeof presentationOpen !== 'undefined' && presentationOpen && typeof currentPresentationTask !== 'undefined' && currentPresentationTask)
       ? {
           tarea_id: currentPresentationTask.id,
           tarea_nombre: currentPresentationTask.name,
           paso_actual_indice: (typeof currentStepIndex !== 'undefined') ? currentStepIndex : 0,
-          paso_actual_texto: (typeof presentationSteps !== 'undefined' && presentationSteps[currentStepIndex]) ? (presentationSteps[currentStepIndex].text || presentationSteps[currentStepIndex]) : '',
           total_pasos: (typeof presentationSteps !== 'undefined') ? presentationSteps.length : 0,
           segundos_restantes: currentPresentationTask.totalTime ? ((typeof currentStepCountdown !== 'undefined') ? currentStepCountdown : 0) : null,
           en_negativo: !!(currentPresentationTask.totalTime && typeof currentStepCountdown !== 'undefined' && currentStepCountdown < 0),
-          alarma_sonando: (typeof stepAlarmActive !== 'undefined') ? !!stepAlarmActive : false,
-          retrasos_registrados: Array.isArray(currentPresentationTask.delayLogs) ? currentPresentationTask.delayLogs : []
+          alarma_sonando: (typeof stepAlarmActive !== 'undefined') ? !!stepAlarmActive : false
         }
       : null;
 
     const nowObj = new Date();
     const pad2 = n => String(n).padStart(2, '0');
-    const ahoraLocal = `${nowObj.getFullYear()}-${pad2(nowObj.getMonth() + 1)}-${pad2(nowObj.getDate())} ${pad2(nowObj.getHours())}:${pad2(nowObj.getMinutes())}:${pad2(nowObj.getSeconds())}`;
+    const ahoraLocal = `${nowObj.getFullYear()}-${pad2(nowObj.getMonth() + 1)}-${pad2(nowObj.getDate())} ${pad2(nowObj.getHours())}:${pad2(nowObj.getMinutes())}`;
     let zonaHoraria = 'local';
     try { zonaHoraria = Intl.DateTimeFormat().resolvedOptions().timeZone || zonaHoraria; } catch (e) {}
-    const offsetMin = -nowObj.getTimezoneOffset();
-    const offsetSign = offsetMin >= 0 ? '+' : '-';
-    const offsetStr = `UTC${offsetSign}${pad2(Math.floor(Math.abs(offsetMin) / 60))}:${pad2(Math.abs(offsetMin) % 60)}`;
 
     const allNotes = (typeof notes !== 'undefined' && Array.isArray(notes)) ? notes : [];
     const allRules = (typeof automationRules !== 'undefined' && Array.isArray(automationRules)) ? automationRules : [];
 
     return {
       ok: true,
-      ahora_iso: nowObj.toISOString(),
+      modo: isFull ? 'completo' : 'resumen',
       ahora_local: ahoraLocal,
-      zona_horaria: `${zonaHoraria} (${offsetStr})`,
+      zona_horaria: zonaHoraria,
       carpeta_actual_id: (typeof currentFolderId !== 'undefined') ? currentFolderId : null,
-      plantillas_usuario: (typeof userTemplates !== 'undefined') ? userTemplates.map(t => ({ id: t.id, nombre: t.name, pasos: (t.steps || []).length, tiempo_minutos: t.totalTime ? Math.round((t.totalTime / 60) * 10) / 10 : null, prioridad: t.priority || null })) : [],
-      notas_resumen: {
-        total: allNotes.length,
-        recientes: allNotes.slice(0, 12).map(n => ({ id: n.id, titulo: n.title, carpeta_id: n.folderId || null, tarea_id: n.taskId || null, etiquetas: n.tags || [] }))
-      },
-      reglas_automatizacion_resumen: {
-        total: allRules.length,
-        activas: allRules.filter(r => r.activa !== false).length
-      },
+      notas_total: allNotes.length,
+      plantillas_total: (typeof userTemplates !== 'undefined') ? userTemplates.length : 0,
+      reglas_activas: allRules.filter(r => r.activa !== false).length,
       presentacion_activa: activePres,
-      carpetas: (typeof folders !== 'undefined') ? folders.map(f => ({
-        id: f.id, nombre: f.name, es_recompensas: !!f.isDefaultRewards,
-        cantidad_tareas: (f.tasks || []).length,
-        cantidad_completadas: (f.finished || []).length,
-        tareas: (f.tasks || []).map(t => {
-          const curIdx = t.currentStepIndex || 0;
-          return {
-            id: t.id, nombre: t.name, es_recompensa: !!t.isReward,
-            tiempo_minutos: t.totalTime ? Math.round((t.totalTime / 60) * 10) / 10 : (t.rewardTime || null),
-            tiempo_real_min: t.actualTimeMinutes || null,
-            tiempos_pasos_minutos: Array.isArray(t.stepTimes) ? t.stepTimes.map(s => Math.round(((Number(s) || 0) / 60) * 10) / 10) : [],
-            tiempos_personalizados: !!t.hasCustomStepTimes,
-            color: t.color || null, prioridad: t.priority || null, fecha_vencimiento: t.dueDate || null,
-            etiquetas: Array.isArray(t.tags) ? t.tags : [],
-            pasos: t.steps || [],
-            pasos_detalle: (t.steps || []).map((s, idx) => ({
-              indice: idx,
-              texto: (typeof s === 'string') ? s : (s.text || ''),
-              completado: (typeof s === 'object' && s !== null && typeof s.completed === 'boolean') ? s.completed : (idx < curIdx),
-              minutos: (Array.isArray(t.stepTimes) && typeof t.stepTimes[idx] === 'number') ? Math.round((t.stepTimes[idx] / 60) * 10) / 10 : null
-            })),
-            retrasos: Array.isArray(t.delayLogs) ? t.delayLogs : []
-          };
-        }),
-        tareas_completadas: (f.finished || []).map(t => ({
-          id: t.id, nombre: t.name,
-          tiempo_minutos: t.totalTime ? Math.round((t.totalTime / 60) * 10) / 10 : null,
-          tiempo_real_min: t.actualTimeMinutes || null,
-          fecha_completada: t.completedAt || null,
-          color: t.color || null, prioridad: t.priority || null,
-          etiquetas: Array.isArray(t.tags) ? t.tags : [],
-          pasos_detalle: (t.steps || []).map((s, idx) => ({
-            indice: idx,
-            texto: (typeof s === 'string') ? s : (s.text || ''),
-            completado: true,
-            minutos: (Array.isArray(t.stepTimes) && typeof t.stepTimes[idx] === 'number') ? Math.round((t.stepTimes[idx] / 60) * 10) / 10 : null
-          })),
-          retrasos: Array.isArray(t.delayLogs) ? t.delayLogs : []
-        }))
-      })) : []
+      carpetas: (typeof folders !== 'undefined') ? folders.map(f => serializeFolderForAI(f, incluirCompletadas, incluirPasos)) : []
     };
   }
   function findFolder(id) { return (typeof folders !== 'undefined') ? folders.find(f => f.id === id) : null; }
@@ -560,7 +764,98 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
   //  TOOL EXECUTORS
   // --------------------------------------------------------------------------
   const TOOL_EXECUTORS = {
-    obtener_estado() { return getStateSnapshot(); },
+    obtener_estado(args = {}) { return getStateSnapshot(args || {}); },
+
+    obtener_carpeta({ carpeta_id, incluir_completadas = false, incluir_pasos = false }) {
+      const f = findFolder(carpeta_id);
+      if (!f) return { ok: false, error: 'Carpeta no encontrada.' };
+      return { ok: true, carpeta: serializeFolderForAI(f, !!incluir_completadas, !!incluir_pasos) };
+    },
+
+    obtener_tarea({ tarea_id }) {
+      const found = findTask(tarea_id);
+      if (!found) return { ok: false, error: 'Tarea no encontrada.' };
+      return {
+        ok: true,
+        carpeta_id: found.folder.id,
+        carpeta_nombre: found.folder.name,
+        completada: !!found.isFinished,
+        tarea: serializeTaskForAI(found.task, true, !!found.isFinished)
+      };
+    },
+
+    leer_nota({ nota_id }) {
+      const list = (typeof notes !== 'undefined' && Array.isArray(notes)) ? notes : [];
+      const n = list.find(x => x.id === nota_id);
+      if (!n) return { ok: false, error: 'Nota no encontrada.' };
+      return {
+        ok: true,
+        nota: {
+          id: n.id,
+          titulo: n.title,
+          contenido: n.content || '',
+          carpeta_id: n.folderId || null,
+          tarea_id: n.taskId || null,
+          etiquetas: n.tags || [],
+          color: n.color || null,
+          updatedAt: n.updatedAt || n.createdAt || null
+        }
+      };
+    },
+
+    parchear_nota({ nota_id, modo, texto, encabezado_objetivo }) {
+      const list = (typeof notes !== 'undefined' && Array.isArray(notes)) ? notes : [];
+      const note = list.find(n => n.id === nota_id);
+      if (!note) return { ok: false, error: 'Nota no encontrada.' };
+      const m = String(modo || '').toLowerCase();
+      const body = String(texto || '');
+      const current = String(note.content || '');
+
+      if (m === 'append') {
+        note.content = current ? (current.trimEnd() + '\n\n' + body) : body;
+      } else if (m === 'prepend') {
+        note.content = current ? (body + '\n\n' + current.trimStart()) : body;
+      } else if (m === 'reemplazar_seccion') {
+        const targetRaw = String(encabezado_objetivo || '').trim();
+        if (!targetRaw) return { ok: false, error: 'Indica encabezado_objetivo para reemplazar_seccion.' };
+        const cleanTarget = targetRaw.replace(/^#+\s*/, '').toLowerCase();
+        const lines = current.split(/\r?\n/);
+        let startIdx = -1;
+        let startLevel = 2;
+        for (let i = 0; i < lines.length; i++) {
+          const hm = lines[i].match(/^(#{1,6})\s+(.+)$/);
+          if (hm && hm[2].trim().toLowerCase() === cleanTarget) {
+            startIdx = i;
+            startLevel = hm[1].length;
+            break;
+          }
+        }
+        if (startIdx === -1) {
+          const heading = targetRaw.startsWith('#') ? targetRaw : ('## ' + targetRaw);
+          note.content = (current ? current.trimEnd() + '\n\n' : '') + heading + '\n' + body;
+        } else {
+          let endIdx = lines.length;
+          for (let i = startIdx + 1; i < lines.length; i++) {
+            const hm = lines[i].match(/^(#{1,6})\s+/);
+            if (hm && hm[1].length <= startLevel) {
+              endIdx = i;
+              break;
+            }
+          }
+          const headingLine = lines[startIdx];
+          const replacement = body.trimStart().startsWith('#') ? [body] : [headingLine, body];
+          lines.splice(startIdx, endIdx - startIdx, ...replacement);
+          note.content = lines.join('\n');
+        }
+      } else {
+        return { ok: false, error: 'Modo inválido (append | prepend | reemplazar_seccion).' };
+      }
+
+      note.updatedAt = Date.now();
+      if (typeof saveNotes === 'function') saveNotes();
+      if (typeof renderNotes === 'function') renderNotes();
+      return { ok: true, nota_id: note.id, titulo: note.title, longitud_chars: note.content.length };
+    },
 
     crear_carpeta({ nombre }) {
       if (!nombre || !nombre.trim()) return { ok: false, error: 'Nombre vacío' };
@@ -687,9 +982,10 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
         if (hasAnyCustomMin) {
           task.stepTimes = parsedTimes;
           task.hasCustomStepTimes = true;
-          task.totalTime = (tiempo_minutos && Number(tiempo_minutos) > 0)
-            ? Math.round(Number(tiempo_minutos) * 60)
-            : parsedTimes.reduce((a, b) => a + b, 0);
+          const sumSec = parsedTimes.reduce((a, b) => a + b, 0);
+          task.totalTime = sumSec > 0
+            ? sumSec
+            : ((tiempo_minutos && Number(tiempo_minutos) > 0) ? Math.round(Number(tiempo_minutos) * 60) : null);
         } else if (tiempo_minutos && Number(tiempo_minutos) > 0) {
           task.totalTime = Math.round(Number(tiempo_minutos) * 60);
           if (typeof recalcStepTimes === 'function') recalcStepTimes(task, true);
@@ -798,7 +1094,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
           return (!isNaN(val) && val >= 0) ? Math.round(val * 60) : 0;
         });
         task.hasCustomStepTimes = true;
-        if (actualizar_total || !task.totalTime) {
+        if (actualizar_total !== false) {
           task.totalTime = task.stepTimes.reduce((a, b) => a + b, 0);
         }
       } else if (paso_indice !== undefined && minutos !== undefined) {
@@ -815,7 +1111,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
           task.stepTimes[idx] = Math.max(0, Math.round(Number(minutos) * 60));
           task.hasCustomStepTimes = true;
         }
-        if (actualizar_total) {
+        if (actualizar_total !== false) {
           task.totalTime = task.stepTimes.reduce((a, b) => a + (Number(b) || 0), 0);
         }
       } else {
@@ -826,8 +1122,8 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       if (typeof currentFolderId !== 'undefined' && currentFolderId === found.folder.id && typeof renderTasks === 'function') {
         renderTasks();
       }
-      const resumen = task.stepTimes.map((s, i) => `P${i + 1}: ${Math.round((s / 60) * 10) / 10}m`).join(', ');
-      return { ok: true, mensaje: `Tiempos de pasos actualizados en "${task.name}" (${resumen}).` };
+      const resumen = task.stepTimes.map((s, i) => `P${i + 1}: ${secToMinExact(s) || 0}m (${s}s)`).join(', ');
+      return { ok: true, mensaje: `Tiempos actualizados en "${task.name}" (${resumen}).`, tiempo_total_min: secToMinExact(task.totalTime), tiempo_total_seg: task.totalTime };
     },
 
     iniciar_presentacion_tarea({ tarea_id, paso_indice }) {
@@ -903,10 +1199,19 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       const dest = findFolder(carpeta_destino_id);
       if (!dest) return { ok: false, error: 'Carpeta destino no encontrada' };
       if (dest.isDefaultRewards) return { ok: false, error: 'No se puede mover una tarea normal a la carpeta de recompensas.' };
-      const idx = found.folder.tasks.findIndex(t => t.id === tarea_id);
-      if (idx === -1) return { ok: false, error: 'Tarea no encontrada en carpeta origen' };
-      const [task] = found.folder.tasks.splice(idx, 1);
-      dest.tasks.push(task);
+      const task = found.task;
+      if (typeof window.dedupeTaskAcrossFolders === 'function') {
+        window.dedupeTaskAcrossFolders(task.id);
+      } else {
+        const idx = found.folder.tasks.findIndex(t => t.id === tarea_id);
+        if (idx !== -1) found.folder.tasks.splice(idx, 1);
+      }
+      if (found.isFinished) {
+        if (!Array.isArray(dest.finished)) dest.finished = [];
+        dest.finished.push(task);
+      } else {
+        dest.tasks.push(task);
+      }
       if (typeof saveDataToLocalStorage === 'function') saveDataToLocalStorage();
       if (typeof renderFolders === 'function') renderFolders();
       if (typeof currentFolderId !== 'undefined' && typeof renderTasks === 'function'
@@ -1309,33 +1614,48 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       return { ok: true, total: resultados.length, resultados };
     },
 
-    obtener_reporte_productividad({ carpeta_id }) {
+    obtener_reporte_productividad({ carpeta_id, fecha_desde, fecha_hasta } = {}) {
       let targetFolders = folders;
       if (carpeta_id) {
         const f = findFolder(carpeta_id);
         if (f) targetFolders = [f];
       }
+      const dFrom = fecha_desde ? String(fecha_desde).slice(0, 10) : null;
+      const dTo = fecha_hasta ? String(fecha_hasta).slice(0, 10) : null;
+      const inRange = (iso) => {
+        if (!dFrom && !dTo) return true;
+        if (!iso) return false;
+        const d = String(iso).slice(0, 10);
+        if (dFrom && d < dFrom) return false;
+        if (dTo && d > dTo) return false;
+        return true;
+      };
+
       let totPendientes = 0;
       let totCompletadas = 0;
       let totTiempoMinutos = 0;
 
       targetFolders.forEach(f => {
-        totPendientes += (f.tasks || []).length;
-        totCompletadas += (f.finished || []).length;
-        (f.tasks || []).forEach(t => { if (t.totalTime) totTiempoMinutos += Math.round(t.totalTime / 60); });
-        (f.finished || []).forEach(t => { if (t.totalTime) totTiempoMinutos += Math.round(t.totalTime / 60); });
+        const pend = (f.tasks || []).filter(t => (!dFrom && !dTo) || inRange(t.dueDate));
+        const comp = (f.finished || []).filter(t => inRange(t.completedAt || t.dueDate));
+        totPendientes += pend.length;
+        totCompletadas += comp.length;
+        pend.forEach(t => { if (t.totalTime) totTiempoMinutos += secToMinExact(t.totalTime) || 0; });
+        comp.forEach(t => { if (t.totalTime) totTiempoMinutos += secToMinExact(t.totalTime) || 0; });
       });
 
       const totalTareas = totPendientes + totCompletadas;
       const pct = totalTareas > 0 ? Math.round((totCompletadas / totalTareas) * 100) : 0;
+      const minsRound = Math.round(totTiempoMinutos * 10) / 10;
 
       return {
         ok: true,
+        rango: (dFrom || dTo) ? { desde: dFrom, hasta: dTo } : 'todo',
         carpetas_analizadas: targetFolders.length,
         tareas_pendientes: totPendientes,
         tareas_completadas: totCompletadas,
         porcentaje_cumplimiento: pct + '%',
-        tiempo_estimado_total: totTiempoMinutos + ' minutos (' + (totTiempoMinutos / 60).toFixed(1) + ' hrs)'
+        tiempo_estimado_min: minsRound
       };
     },
 
@@ -1562,14 +1882,29 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       return { ok: true, mensaje: `Nota "${titulo}" creada con éxito.`, nota_id: note.id };
     },
 
-    listar_notas({ carpeta_id, tarea_id }) {
+    listar_notas({ carpeta_id, tarea_id, incluir_contenido = false } = {}) {
       const list = (typeof notes !== 'undefined') ? notes : [];
       const res = list.filter(n => {
         if (carpeta_id && n.folderId !== carpeta_id) return false;
         if (tarea_id && n.taskId !== tarea_id) return false;
         return true;
       });
-      return { ok: true, total: res.length, notas: res };
+      if (incluir_contenido) {
+        return { ok: true, total: res.length, notas: res };
+      }
+      return {
+        ok: true,
+        total: res.length,
+        notas: res.map(n => ({
+          id: n.id,
+          title: n.title,
+          folderId: n.folderId || null,
+          taskId: n.taskId || null,
+          tags: Array.isArray(n.tags) ? n.tags : [],
+          updatedAt: n.updatedAt || n.createdAt || null,
+          preview_120_chars: String(n.content || '').replace(/\s+/g, ' ').trim().slice(0, 120)
+        }))
+      };
     },
 
     eliminar_nota({ nota_id }) {
@@ -1733,43 +2068,110 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       };
     },
 
-    guardar_memoria_usuario({ categoria, clave, valor, es_nucleo }) {
-      const cat = String(categoria || 'preferencias').trim();
+    guardar_memoria_usuario({ categoria, nodo, grado, clave, valor, resumen_corto, conexiones, es_nucleo }) {
       const k = String(clave || '').trim();
       const v = String(valor || '').trim();
-      const isCore = (es_nucleo !== undefined) ? !!es_nucleo : (cat === 'preferencias' || cat === 'energia_horarios' || cat === 'cuadridimensional');
-      if (!k || !v) return { ok: false, error: 'clave y valor son obligatorios' };
+      if (!k || !v) return { ok: false, error: 'clave y valor son obligatorios.' };
+
+      const cat = String(categoria || nodo || 'preferencias').trim();
+      const domainNode = String(nodo || categoria || 'general').trim().toLowerCase();
+      let gradeNum;
+      if (grado !== undefined && grado !== null && [0, 1, 2].includes(Number(grado))) {
+        gradeNum = Number(grado);
+      } else if (es_nucleo !== undefined) {
+        gradeNum = es_nucleo ? 0 : 2;
+      } else {
+        gradeNum = (cat === 'preferencias' || cat === 'energia_horarios' || cat === 'cuadridimensional') ? 0 : 1;
+      }
+      const isCore = gradeNum === 0;
+      const shortSummary = String(resumen_corto || v).replace(/\s+/g, ' ').trim().slice(0, 200);
+      const cleanConns = Array.isArray(conexiones)
+        ? conexiones.filter(c => c && c.tipo && c.id).map(c => ({ tipo: String(c.tipo), id: String(c.id), relacion: String(c.relacion || 'relacionado') }))
+        : undefined;
+
       const list = loadAgentMemory();
-      const existing = list.find(m => m.categoria === cat && m.clave === k);
+      const existing = list.find(m => m.clave === k && ((m.nodo || m.categoria || 'general').toLowerCase() === domainNode || m.categoria === cat));
       if (existing) {
+        existing.categoria = cat;
+        existing.nodo = domainNode;
+        existing.grado = gradeNum;
         existing.valor = v;
+        existing.resumen_corto = shortSummary;
         existing.es_nucleo = isCore;
+        if (cleanConns !== undefined) existing.conexiones = cleanConns;
         existing.updatedAt = new Date().toISOString();
       } else {
         list.unshift({
           id: '_mem_' + Math.random().toString(36).substr(2, 8),
           categoria: cat,
+          nodo: domainNode,
+          grado: gradeNum,
           clave: k,
           valor: v,
+          resumen_corto: shortSummary,
+          conexiones: cleanConns || [],
           es_nucleo: isCore,
           updatedAt: new Date().toISOString()
         });
       }
       saveAgentMemory(list);
-      return { ok: true, mensaje: `Memoria guardada [${cat}/${k}] (${isCore ? 'Capa 1 Núcleo' : 'Capa 2 Archivo'}).`, total_memorias: list.length };
+      return { ok: true, nodo: domainNode, grado: gradeNum, clave: k, total_memorias: list.length };
     },
 
-    buscar_memoria_relevante({ consulta, top_k }) {
+    cargar_nodo_memoria({ nodo, grado_maximo = 1 }) {
+      const target = String(nodo || '').trim().toLowerCase();
+      if (!target) return { ok: false, error: 'Indica el nombre del nodo.' };
+      const maxG = Math.max(0, Math.min(2, Number(grado_maximo)));
+      const list = loadAgentMemory();
+      const matched = list.filter(m => {
+        const mNode = String(m.nodo || m.categoria || 'general').toLowerCase();
+        const mGrade = (typeof m.grado === 'number') ? m.grado : (m.es_nucleo === false ? 2 : 0);
+        return mNode === target && mGrade <= maxG;
+      });
+      const conexionesMap = [];
+      const recuerdos = matched.slice(0, 12).map(m => {
+        const mGrade = (typeof m.grado === 'number') ? m.grado : (m.es_nucleo === false ? 2 : 0);
+        if (Array.isArray(m.conexiones)) {
+          m.conexiones.forEach(c => conexionesMap.push(c));
+        }
+        const item = {
+          id: m.id,
+          clave: m.clave,
+          grado: mGrade,
+          resumen: String(m.resumen_corto || m.valor || '').slice(0, 200)
+        };
+        if (maxG >= 2 && m.valor && m.valor.length > 200) item.valor = m.valor.slice(0, 600);
+        return item;
+      });
+      return {
+        ok: true,
+        nodo: target,
+        grado_maximo: maxG,
+        total: matched.length,
+        recuerdos,
+        conexiones: conexionesMap.slice(0, 20)
+      };
+    },
+
+    buscar_memoria_relevante({ consulta, nodo, grado_maximo, top_k }) {
       const q = String(consulta || '').toLowerCase().trim();
       const k = Math.max(1, Math.min(15, Number(top_k) || 5));
-      const list = loadAgentMemory();
+      const targetNode = nodo ? String(nodo).trim().toLowerCase() : null;
+      const maxG = (grado_maximo !== undefined && grado_maximo !== null) ? Number(grado_maximo) : 2;
+      let list = loadAgentMemory().filter(m => {
+        const mNode = String(m.nodo || m.categoria || 'general').toLowerCase();
+        const mGrade = (typeof m.grado === 'number') ? m.grado : (m.es_nucleo === false ? 2 : 0);
+        if (targetNode && mNode !== targetNode) return false;
+        if (mGrade > maxG) return false;
+        return true;
+      });
       if (!q) return { ok: true, recuerdos: list.slice(0, k) };
 
       const terms = q.split(/\s+/).filter(Boolean);
       const scored = list.map(m => {
-        const hay = `${m.categoria} ${m.clave} ${m.valor}`.toLowerCase();
+        const hay = `${m.nodo || ''} ${m.categoria || ''} ${m.clave || ''} ${m.resumen_corto || ''} ${m.valor || ''}`.toLowerCase();
         let score = 0;
-        terms.forEach(t => { if (hay.includes(t)) score += (m.clave.toLowerCase().includes(t) ? 3 : 1); });
+        terms.forEach(t => { if (hay.includes(t)) score += (String(m.clave || '').toLowerCase().includes(t) ? 3 : 1); });
         return { item: m, score };
       }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
 
@@ -1867,8 +2269,19 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
       };
     },
 
-    analizar_patrones_rendimiento() {
+    analizar_patrones_rendimiento({ fecha_desde, fecha_hasta } = {}) {
       const allFolders = (typeof folders !== 'undefined' && Array.isArray(folders)) ? folders : [];
+      const dFrom = fecha_desde ? String(fecha_desde).slice(0, 10) : null;
+      const dTo = fecha_hasta ? String(fecha_hasta).slice(0, 10) : null;
+      const inRange = (iso) => {
+        if (!dFrom && !dTo) return true;
+        if (!iso) return false;
+        const d = String(iso).slice(0, 10);
+        if (dFrom && d < dFrom) return false;
+        if (dTo && d > dTo) return false;
+        return true;
+      };
+
       const delays = [];
       const desviaciones = [];
       const motivosCount = {};
@@ -1878,19 +2291,20 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
         allTasks.forEach(t => {
           if (Array.isArray(t.delayLogs)) {
             t.delayLogs.forEach(d => {
+              if (!inRange(d.fecha_iso || d.timestamp)) return;
               delays.push({ carpeta: f.name, tarea: t.name, ...d });
               const m = String(d.motivo || 'Sin especificar').trim().toLowerCase();
               motivosCount[m] = (motivosCount[m] || 0) + 1;
             });
           }
-          if (t.totalTime && t.actualTimeMinutes) {
-            const est = Math.round((t.totalTime / 60) * 10) / 10;
+          if (t.totalTime && t.actualTimeMinutes && inRange(t.completedAt || t.dueDate)) {
+            const est = secToMinExact(t.totalTime) || 0;
             desviaciones.push({
               carpeta: f.name,
               tarea: t.name,
               estimado_min: est,
               real_min: t.actualTimeMinutes,
-              diferencia_min: Math.round((t.actualTimeMinutes - est) * 10) / 10
+              diferencia_min: Math.round((t.actualTimeMinutes - est) * 100) / 100
             });
           }
         });
@@ -1903,6 +2317,7 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
 
       return {
         ok: true,
+        rango: (dFrom || dTo) ? { desde: dFrom, hasta: dTo } : 'todo',
         total_retrasos_registrados: delays.length,
         top_motivos_retraso: topMotivos,
         ultimos_retrasos: delays.slice(-10),
@@ -2044,6 +2459,43 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
         speakAudioCoach('Audio Coach activado correctamente.');
       }
       return { ok: true, mensaje: `Audio Coach ${habilitado ? 'activado 🔊' : 'desactivado 🔇'}.` };
+    },
+
+    // --- MOTOR FINANCIERO ESTRUCTURADO (GTQ / USD EN CENTAVOS) ---
+    fin_gestionar_cuenta(args = {}) {
+      if (!window.EfectivaFinance) return { ok: false, error: 'Motor financiero no disponible.' };
+      return window.EfectivaFinance.gestionarCuenta(args);
+    },
+    fin_registrar_movimiento(args = {}) {
+      if (!window.EfectivaFinance) return { ok: false, error: 'Motor financiero no disponible.' };
+      return window.EfectivaFinance.registrarMovimiento(args);
+    },
+    fin_gestionar_compromiso(args = {}) {
+      if (!window.EfectivaFinance) return { ok: false, error: 'Motor financiero no disponible.' };
+      return window.EfectivaFinance.gestionarCompromiso(args);
+    },
+    fin_gestionar_inversion(args = {}) {
+      if (!window.EfectivaFinance) return { ok: false, error: 'Motor financiero no disponible.' };
+      return window.EfectivaFinance.gestionarInversion(args);
+    },
+    fin_conciliar_arqueo(args = {}) {
+      if (!window.EfectivaFinance) return { ok: false, error: 'Motor financiero no disponible.' };
+      return window.EfectivaFinance.conciliarArqueo(args);
+    },
+    fin_obtener_resumen(args = {}) {
+      if (!window.EfectivaFinance) return { ok: false, error: 'Motor financiero no disponible.' };
+      return window.EfectivaFinance.obtenerResumen(args);
+    },
+    fin_exportar_a_nota(args = {}) {
+      if (!window.EfectivaFinance) return { ok: false, error: 'Motor financiero no disponible.' };
+      const md = window.EfectivaFinance.exportarMarkdown(args);
+      const titulo = String(args.titulo || ('Estado Financiero ' + new Date().toISOString().slice(0, 10)));
+      return TOOL_EXECUTORS.crear_nota({
+        titulo,
+        contenido: md,
+        carpeta_id: args.carpeta_id || null,
+        etiquetas: ['finanzas', 'snapshot']
+      });
     }
   };
 
@@ -2112,15 +2564,30 @@ COMPORTAMIENTO PROACTIVO ESPERADO:
     const lista = folders.map((f) => {
       const cantTareas = (f.tasks || []).length;
       const cantFin = (f.finished || []).length;
-      return `- ${f.name} (ID: ${f.id}) [${cantTareas} tareas pdt, ${cantFin} fin]${f.isDefaultRewards ? ' (Recompensas)' : ''}`;
+      return `- ${f.name} (ID: ${f.id}) [${cantTareas} pdt, ${cantFin} fin]${f.isDefaultRewards ? ' (Recompensas)' : ''}`;
     }).join('\n');
+
     const allMems = loadAgentMemory();
-    const coreMems = allMems.filter(m => m.es_nucleo !== false).slice(0, 8);
-    const archiveCount = Math.max(0, allMems.length - coreMems.length);
-    const memBlock = coreMems.length > 0
-      ? '\n\nMEMORIA NÚCLEO DEL USUARIO (Capa 1, ' + coreMems.length + '):\n' + coreMems.map(m => `- [${m.categoria}] ${m.clave}: ${m.valor}`).join('\n') + (archiveCount > 0 ? `\n(Archivo Capa 2: ${archiveCount} recuerdos adicionales disponibles con buscar_memoria_relevante)` : '')
-      : '\n\nMEMORIA NÚCLEO DEL USUARIO: (Aún vacía; guarda hechos vitales con es_nucleo=true o archivo con es_nucleo=false).' + (archiveCount > 0 ? ` (Archivo Capa 2: ${archiveCount} recuerdos)` : '');
-    return '\n\nESTADO ACTUAL EN TIEMPO REAL EN LA APP (' + folders.length + ' carpetas en total):\n' + (lista || '(Sin carpetas)') + memBlock;
+    const g0 = [];
+    const nodeCounts = {};
+    allMems.forEach(m => {
+      const g = (typeof m.grado === 'number') ? m.grado : (m.es_nucleo === false ? 2 : 0);
+      const n = String(m.nodo || m.categoria || 'general').toLowerCase();
+      if (g === 0) {
+        g0.push(m);
+      } else {
+        nodeCounts[n] = (nodeCounts[n] || 0) + 1;
+      }
+    });
+
+    const coreList = g0.slice(0, 8);
+    const nodesIdx = Object.entries(nodeCounts).map(([n, c]) => `${n}(${c})`).join(', ');
+    const memBlock = (coreList.length > 0
+      ? '\n\nMEMORIA GRADO 0 (Núcleo):\n' + coreList.map(m => `- [${m.nodo || m.categoria}] ${m.clave}: ${String(m.resumen_corto || m.valor || '').slice(0, 140)}`).join('\n')
+      : '\n\nMEMORIA GRADO 0: (vacía)')
+      + (nodesIdx ? `\nNODOS ACTIVOS (Grado 1/2 — 0 tokens hasta cargar con cargar_nodo_memoria): ${nodesIdx}` : '');
+
+    return '\n\nCARPETAS (' + folders.length + '):\n' + (lista || '(Sin carpetas)') + memBlock;
   }
 
   const PENDING_AI_JOB_KEY = 'efectivaPendingAiJobV1';
