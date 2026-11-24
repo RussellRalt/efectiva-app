@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Efectiva" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=41" />
+  <link rel="stylesheet" href="style.css?v=42" />
   <link rel="manifest" href="manifest.json" />
   <!-- Librería ligera para captura de elementos en imagen PNG HD -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -19,7 +19,7 @@
   <!-- SECCIÓN CARPETAS -->
   <section id="foldersSection">
     <header>
-      <h1 class="app-brand"><span class="app-brand-mark">E</span><span>Efectiva</span><span id="appVersionBadge" class="app-version-pill">v41</span></h1>
+      <h1 class="app-brand"><span class="app-brand-mark">E</span><span>Efectiva</span><span id="appVersionBadge" class="app-version-pill">v42</span></h1>
     </header>
 
     <!-- Contenedor de íconos (tema, importar, finanzas, centro de control, papelera) -->
@@ -351,20 +351,20 @@
 
   <!-- Supabase: registro, inicio de sesión y sincronización segura -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="auth.js?v=41"></script>
+  <script src="auth.js?v=42"></script>
   <!-- Sistema de modales temáticos (DEBE cargarse antes que el resto) -->
-  <script src="modals.js?v=41"></script>
+  <script src="modals.js?v=42"></script>
   <!-- Motor financiero estructurado multi-moneda (GTQ/USD en centavos) -->
-  <script src="finance.js?v=41"></script>
+  <script src="finance.js?v=42"></script>
   <!-- Módulo de Tablas Genéricas (Excel / Notion ligero) -->
-  <script src="tables.js?v=41"></script>
+  <script src="tables.js?v=42"></script>
   <!-- Vista Visual tipo Excel para el Motor Financiero -->
-  <script src="finance_ui.js?v=41"></script>
+  <script src="finance_ui.js?v=42"></script>
   <!-- Script principal -->
-  <script src="script.js?v=41"></script>
+  <script src="script.js?v=42"></script>
   <!-- Alarma Perenne Anti-Ociosidad (requiere tarea en Play) -->
-  <script src="idle_alarm.js?v=41"></script>
-  <script src="ai_chat.js?v=41"></script>
+  <script src="idle_alarm.js?v=42"></script>
+  <script src="ai_chat.js?v=42"></script>
   <script>
     if ('serviceWorker' in navigator) {
       const isCapacitorNative = !!(window.EfectivaAndroidBridge || (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()));

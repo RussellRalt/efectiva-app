@@ -2071,7 +2071,7 @@ function updateAppVersionBadge() {
   try {
     const el = document.getElementById('appVersionBadge');
     if (!el) return;
-    el.textContent = 'v41 · 🔊';
+    el.textContent = 'v42 · 🔊';
     el.title = 'Efectiva v34 — PiP blindado, Memoria por Nodos y Motor Financiero';
   } catch (_) {}
 }
@@ -3023,6 +3023,7 @@ function saveActivePresentationState() {
   } catch (e) {
     console.warn('No se pudo guardar estado de presentación:', e);
   }
+  syncNativePlayNotification();
 }
 
 function clearActivePresentationState() {
@@ -3742,6 +3743,7 @@ function showPresentationStep(direction = 'none') {
 
 function showCongratulations() {
   stopAllSpeechSynthesis();
+  stopNativePlayNotification();
   updatePresentationUI();
   const counterEl = document.getElementById('presentationStepCounter');
   if (counterEl) counterEl.textContent = '¡Completado!';
@@ -3981,10 +3983,49 @@ function setupDelayJustificationUI() {
   }
 }
 
-// === PUENTE NATIVO CAPACITOR PARA ALARMAS CON PANTALLA BLOQUEADA ===
+// === PUENTE NATIVO CAPACITOR Y ANDROID FOREGROUND SERVICE (MODO PLAY EN VIVO + ALARMA EXACTA) ===
 const NATIVE_STEP_ALARM_ID = 9001;
 
+function syncNativePlayNotification() {
+  try {
+    const bridge = window.EfectivaPlayBridge;
+    if (!bridge) return;
+    if (!presentationOpen || !currentPresentationTask) {
+      if (typeof bridge.stop === 'function') bridge.stop();
+      return;
+    }
+    const taskName = String(currentPresentationTask.name || 'Tarea en curso');
+    const stepText = extractStepText(presentationSteps[currentStepIndex]) || 'Paso actual';
+    const hasCountdown = Boolean(currentPresentationTask.totalTime);
+    const elapsed = presentationStepStartedAt ? Math.floor((Date.now() - presentationStepStartedAt) / 1000) : 0;
+    const secondsVal = hasCountdown
+      ? (Number.isFinite(currentStepCountdown) ? Math.round(currentStepCountdown) : Math.round((presentationBaseSeconds || 0) - elapsed))
+      : (Number.isFinite(timerSeconds) ? Math.round(timerSeconds) : Math.round((presentationBaseSeconds || 0) + elapsed));
+
+    bridge.startOrUpdate(
+      taskName,
+      (currentStepIndex || 0) + 1,
+      (Array.isArray(presentationSteps) ? presentationSteps.length : 1) || 1,
+      stepText.slice(0, 240),
+      hasCountdown,
+      secondsVal
+    );
+  } catch (_) {}
+}
+
+function stopNativePlayNotification() {
+  try {
+    if (window.EfectivaPlayBridge && typeof window.EfectivaPlayBridge.stop === 'function') {
+      window.EfectivaPlayBridge.stop();
+    }
+  } catch (_) {}
+}
+
 async function scheduleNativeStepAlarm(secondsFromNow, stepText) {
+  if (window.EfectivaPlayBridge) {
+    syncNativePlayNotification();
+    return;
+  }
   try {
     const LocalNotif = window.Capacitor?.Plugins?.LocalNotifications;
     if (!LocalNotif || !secondsFromNow || secondsFromNow <= 0) return;
@@ -4069,6 +4110,7 @@ function stopStepOvertimeAlarm() {
     stepAlarmBeepInterval = null;
   }
   showSilenceAlarmButton(false);
+  try { window.EfectivaPlayBridge?.stopStepAlarmSound(); } catch (_) {}
 }
 
 function showSilenceAlarmButton(visible) {
@@ -4334,6 +4376,7 @@ function closePresentation(force = false) {
   stopAllSpeechSynthesis();
   stopStepOvertimeAlarm();
   cancelNativeStepAlarm();
+  stopNativePlayNotification();
   clearActivePresentationState();
   timerDisplay.textContent = '00:00';
   timerDisplay.classList.remove('timer-overdue');

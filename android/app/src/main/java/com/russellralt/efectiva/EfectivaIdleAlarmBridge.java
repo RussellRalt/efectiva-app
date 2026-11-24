@@ -164,4 +164,15 @@ public class EfectivaIdleAlarmBridge {
             } catch (Exception ignored) {}
         });
     }
+
+    @JavascriptInterface
+    public void openAppSettings() {
+        activity.runOnUiThread(() -> {
+            try {
+                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                intent.setData(Uri.parse("package:" + context.getPackageName()));
+                activity.startActivity(intent);
+            } catch (Exception ignored) {}
+        });
+    }
 }

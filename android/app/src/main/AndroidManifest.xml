@@ -50,6 +50,21 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <service
+            android:name=".EfectivaPlayForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name=".EfectivaStepAlarmReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.russellralt.efectiva.FIRE_STEP_ALARM" />
+            </intent-filter>
+        </receiver>
+
         <receiver
             android:name=".EfectivaIdleAlarmReceiver"
             android:enabled="true"

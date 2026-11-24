@@ -505,19 +505,37 @@
 
         ${(() => {
           const perms = getNativePerms();
+          const apkUrl = 'https://github.com/RussellRalt/efectiva-app/releases/latest/download/efectiva-v42.apk';
           if (perms) {
+            const hasPlayBridge = !!global.EfectivaPlayBridge;
             return `
               <div class="idle-perms-box">
-                <div class="idle-perms-title">Permisos Android (para sonar con app cerrada)</div>
+                <div class="idle-perms-title">Permisos Android (para nunca cerrarse ni fallar)</div>
                 <div class="idle-perms-list">
                   <button type="button" class="fin-btn sm" id="permNotifBtn">${perms.notifications ? '✅' : '⚠️'} Notificaciones</button>
                   <button type="button" class="fin-btn sm" id="permExactBtn">${perms.exactAlarm ? '✅' : '⚠️'} Alarmas exactas</button>
                   <button type="button" class="fin-btn sm" id="permBatteryBtn">${perms.batteryOptimization ? '✅' : '⚠️'} Sin restricción batería</button>
                   <button type="button" class="fin-btn sm" id="permFullBtn">${perms.fullScreenIntent ? '✅' : '⚠️'} Pantalla bloqueada</button>
+                  <button type="button" class="fin-btn sm" id="permAppSettingsBtn">⚙️ Ajustes del teléfono</button>
                 </div>
-                <div class="idle-snooze-row" style="margin-top:6px;">
+                <small style="opacity:0.88;">${hasPlayBridge ? '✅ Barra en vivo durante Play activa (APK v42)' : '⚠️ Actualizá a APK v42 para barra en vivo durante Play'}</small>
+                <div class="idle-snooze-row" style="margin-top:4px;">
                   <button type="button" class="fin-btn sm primary" id="idleTestLoudBtn">🔊 Probar alarma</button>
                   <button type="button" class="fin-btn sm danger" id="idleStopLoudBtn">🔇 Silenciar ahora</button>
+                  ${!hasPlayBridge ? `<a class="fin-btn sm primary" href="${apkUrl}" target="_blank" rel="noopener" style="text-decoration:none;">⬇ Descargar APK v42</a>` : ''}
+                </div>
+              </div>
+            `;
+          }
+          const isOldApk = !!(global.Capacitor && typeof global.Capacitor.isNativePlatform === 'function' && global.Capacitor.isNativePlatform());
+          if (isOldApk) {
+            return `
+              <div class="idle-perms-box">
+                <div class="idle-perms-title">Actualización de APK requerida (v42)</div>
+                <small style="opacity:0.9;">Tu APK actual aún no incluye los permisos nativos ni la barra en vivo durante Play. Instalá la APK v42 para que Android no cierre la app al ir a WhatsApp.</small>
+                <div class="idle-snooze-row" style="margin-top:6px;">
+                  <a class="fin-btn sm primary" href="${apkUrl}" target="_blank" rel="noopener" style="text-decoration:none;">⬇ Descargar APK v42</a>
+                  <button type="button" class="fin-btn sm" id="idleTestWebLoudBtn">🔊 Probar sonido</button>
                 </div>
               </div>
             `;
@@ -525,9 +543,10 @@
           return `
             <div class="idle-perms-box">
               <div class="idle-perms-title">Modo Alarma con app cerrada</div>
-              <small style="opacity:0.85;">En APK v40+ se habilita el servicio nativo <code>USAGE_ALARM</code> + <code>AlarmManager</code> + <code>BOOT_COMPLETED</code> para sonar incluso con la app cerrada y en silencio.</small>
+              <small style="opacity:0.85;">Para barra fija en notificaciones y alarma escandalosa al ir a WhatsApp o cerrar la app, instalá la APK Android v42.</small>
               <div class="idle-snooze-row" style="margin-top:6px;">
                 <button type="button" class="fin-btn sm primary" id="idleTestWebLoudBtn">🔊 Probar sonido ahora</button>
+                <a class="fin-btn sm" href="${apkUrl}" target="_blank" rel="noopener" style="text-decoration:none;">📱 Descargar APK v42</a>
               </div>
             </div>
           `;
@@ -612,6 +631,8 @@
     if (permBatteryBtn) permBatteryBtn.onclick = () => { try { global.EfectivaIdleAlarmBridge?.requestIgnoreBatteryOptimizations(); } catch (_) {} };
     const permFullBtn = modal.querySelector('#permFullBtn');
     if (permFullBtn) permFullBtn.onclick = () => { try { global.EfectivaIdleAlarmBridge?.requestFullScreenIntentPermission(); } catch (_) {} };
+    const permAppSettingsBtn = modal.querySelector('#permAppSettingsBtn');
+    if (permAppSettingsBtn) permAppSettingsBtn.onclick = () => { try { global.EfectivaIdleAlarmBridge?.openAppSettings(); } catch (_) {} };
     const testLoudBtn = modal.querySelector('#idleTestLoudBtn');
     if (testLoudBtn) testLoudBtn.onclick = () => { try { global.EfectivaIdleAlarmBridge?.triggerTestAlarm(buildPendingSummaryText(pending)); } catch (_) {} };
     const stopLoudBtn = modal.querySelector('#idleStopLoudBtn');
@@ -724,9 +745,23 @@
     document.addEventListener('pointerdown', unlockOnce, { once: true, capture: true });
     document.addEventListener('keydown', unlockOnce, { once: true, capture: true });
 
+    const onResumeForeground = () => {
+      evaluateIdleAlarm();
+      if (panelOpen && document.getElementById('idleAlarmModal')) {
+        openIdleAlarmPanel();
+      }
+    };
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) evaluateIdleAlarm();
+      if (!document.hidden) onResumeForeground();
     });
+    try {
+      const CapAppIdle = global.Capacitor?.Plugins?.App;
+      if (CapAppIdle && typeof CapAppIdle.addListener === 'function') {
+        CapAppIdle.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) onResumeForeground();
+        });
+      }
+    } catch (_) {}
 
     if (tickTimer) clearInterval(tickTimer);
     tickTimer = setInterval(() => evaluateIdleAlarm(false), 3000);

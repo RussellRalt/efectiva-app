@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     private EfectivaAndroidTtsBridge nativeTtsBridge = null;
     private EfectivaBgBridge bgBridge = null;
     private EfectivaIdleAlarmBridge idleAlarmBridge = null;
+    private EfectivaPlayBridge playBridge = null;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -48,6 +49,10 @@ public class MainActivity extends BridgeActivity {
         if (wv != null && idleAlarmBridge == null) {
             idleAlarmBridge = new EfectivaIdleAlarmBridge(this);
             wv.addJavascriptInterface(idleAlarmBridge, "EfectivaIdleAlarmBridge");
+        }
+        if (wv != null && playBridge == null) {
+            playBridge = new EfectivaPlayBridge(getApplicationContext());
+            wv.addJavascriptInterface(playBridge, "EfectivaPlayBridge");
         }
         super.load();
     }
