@@ -2071,7 +2071,7 @@ function updateAppVersionBadge() {
   try {
     const el = document.getElementById('appVersionBadge');
     if (!el) return;
-    el.textContent = 'v40 · 🔊';
+    el.textContent = 'v41 · 🔊';
     el.title = 'Efectiva v34 — PiP blindado, Memoria por Nodos y Motor Financiero';
   } catch (_) {}
 }
@@ -3151,6 +3151,9 @@ function startPresentation(task, restoredState = null) {
   startTimer();
   if (task.totalTime && currentStepCountdown > 0) scheduleNativeStepAlarm(currentStepCountdown, presentationSteps[currentStepIndex]);
   saveActivePresentationState();
+  if (window.EfectivaIdleAlarm && typeof window.EfectivaIdleAlarm.evaluate === 'function') {
+    window.EfectivaIdleAlarm.evaluate(false);
+  }
 
   // Limpiar y registrar listeners de interacción (click y swipe vertical)
   presentationModal.removeEventListener('click', handleFinalClick);
@@ -4397,6 +4400,9 @@ function closePresentation(force = false) {
   saveDataToLocalStorage();
   renderTasks();
   releaseWakeLock();
+  if (window.EfectivaIdleAlarm && typeof window.EfectivaIdleAlarm.evaluate === 'function') {
+    window.EfectivaIdleAlarm.evaluate(false);
+  }
 }
 
 function formatTime(sec) {
