@@ -8,6 +8,7 @@ const files = [
   'finance.js',
   'finance_ui.js',
   'tables.js',
+  'idle_alarm.js',
   'ai_chat.js',
   'modals.js',
   'auth.js',

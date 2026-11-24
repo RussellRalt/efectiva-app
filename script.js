@@ -298,6 +298,12 @@ function handleAppBackAction() {
     if (aiClose) aiClose.click();
     return true;
   }
+  const idleAlarmModal = document.getElementById('idleAlarmModal');
+  if (idleAlarmModal) {
+    if (window.EfectivaIdleAlarm) window.EfectivaIdleAlarm.closePanel();
+    else idleAlarmModal.remove();
+    return true;
+  }
   const colorPickerEl = document.getElementById('taskColorPicker');
   if (colorPickerEl) {
     if (typeof closeColorPicker === 'function') closeColorPicker();
@@ -2065,7 +2071,7 @@ function updateAppVersionBadge() {
   try {
     const el = document.getElementById('appVersionBadge');
     if (!el) return;
-    el.textContent = 'v38 · 🔊';
+    el.textContent = 'v39 · 🔊';
     el.title = 'Efectiva v34 — PiP blindado, Memoria por Nodos y Motor Financiero';
   } catch (_) {}
 }
