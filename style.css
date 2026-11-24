@@ -4986,3 +4986,29 @@ body.light-theme .idle-select-row select {
   border-color: #cbd5e1;
 }
 body.light-theme .idle-pending-meta strong { color: #0f172a; }
+
+.idle-perms-box {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.idle-perms-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ef-text, #f8fafc);
+}
+.idle-perms-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+body.light-theme .idle-perms-box {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1e3a8a;
+}
+body.light-theme .idle-perms-title { color: #1e3a8a; }

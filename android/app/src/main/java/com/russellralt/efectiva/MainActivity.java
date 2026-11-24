@@ -7,11 +7,31 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     private EfectivaAndroidTtsBridge nativeTtsBridge = null;
     private EfectivaBgBridge bgBridge = null;
+    private EfectivaIdleAlarmBridge idleAlarmBridge = null;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(EfectivaTtsPlugin.class);
         super.onCreate(savedInstanceState);
+        if (getIntent() != null && getIntent().getBooleanExtra("fromLoudAlarm", false)) {
+            stopLoudAlarmOnOpen();
+        }
+    }
+
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        if (intent != null && intent.getBooleanExtra("fromLoudAlarm", false)) {
+            stopLoudAlarmOnOpen();
+        }
+    }
+
+    private void stopLoudAlarmOnOpen() {
+        try {
+            android.content.Intent stop = new android.content.Intent(this, EfectivaLoudAlarmService.class);
+            stop.setAction(EfectivaLoudAlarmService.ACTION_STOP);
+            startService(stop);
+        } catch (Exception ignored) {}
     }
 
     @Override
@@ -24,6 +44,10 @@ public class MainActivity extends BridgeActivity {
         if (wv != null && bgBridge == null) {
             bgBridge = new EfectivaBgBridge(getApplicationContext());
             wv.addJavascriptInterface(bgBridge, "EfectivaBgBridge");
+        }
+        if (wv != null && idleAlarmBridge == null) {
+            idleAlarmBridge = new EfectivaIdleAlarmBridge(this);
+            wv.addJavascriptInterface(idleAlarmBridge, "EfectivaIdleAlarmBridge");
         }
         super.load();
     }

@@ -12,8 +12,9 @@
 
   let config = {
     enabled: true,
-    soundEverySec: 15,      // cada cuántos segundos suena el tono en primer plano
-    bgIntervalMin: 5,       // cada cuántos minutos dispara notificación en 2do plano
+    loudMode: true,         // alarma escandalosa por defecto
+    soundEverySec: 12,      // cada cuántos segundos suena el tono en primer plano
+    bgIntervalMin: 5,       // cada cuántos minutos dispara alarma con app cerrada / 2do plano
     speakPending: false,    // leer pendientes en voz alta (opcional)
     snoozeUntil: 0          // timestamp para pausa temporal (ej. descanso/sueño)
   };
@@ -96,7 +97,7 @@
     return pending.length > 0;
   }
 
-  // Tono distintivo de alarma perenne (3 pulsos ascendentes claros, diferente al de fin de paso)
+  // Tono escandaloso (sirena real de alerta) o tono suave según config.loudMode
   function playIdleAlarmTone() {
     try {
       if (typeof unlockStepAlarmAudio === 'function') unlockStepAlarmAudio();
@@ -109,25 +110,81 @@
       }
       if (ctx.state !== 'running') return;
       const now = ctx.currentTime;
-      const freqs = [659.25, 880, 1174.66]; // E5 - A5 - D6
-      freqs.forEach((freq, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        const t0 = now + i * 0.16;
-        osc.frequency.setValueAtTime(freq, t0);
-        gain.gain.setValueAtTime(0.001, t0);
-        gain.gain.exponentialRampToValueAtTime(0.24, t0 + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.14);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(t0);
-        osc.stop(t0 + 0.15);
-      });
-      if (navigator.vibrate) {
-        try { navigator.vibrate([180, 90, 180]); } catch (_) {}
+
+      if (config.loudMode !== false) {
+        // Alarma escandalosa: 4 ráfagas bitonales de alta presencia (980Hz -> 1480Hz)
+        [0, 0.24, 0.48, 0.72].forEach((offset, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sawtooth';
+          const t0 = now + offset;
+          osc.frequency.setValueAtTime(idx % 2 === 0 ? 987.77 : 1479.98, t0);
+          gain.gain.setValueAtTime(0.001, t0);
+          gain.gain.exponentialRampToValueAtTime(0.45, t0 + 0.015);
+          gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.21);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(t0);
+          osc.stop(t0 + 0.22);
+        });
+        if (navigator.vibrate) {
+          try { navigator.vibrate([450, 150, 450, 150, 600]); } catch (_) {}
+        }
+      } else {
+        const freqs = [659.25, 880, 1174.66];
+        freqs.forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          const t0 = now + i * 0.16;
+          osc.frequency.setValueAtTime(freq, t0);
+          gain.gain.setValueAtTime(0.001, t0);
+          gain.gain.exponentialRampToValueAtTime(0.24, t0 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.14);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(t0);
+          osc.stop(t0 + 0.15);
+        });
+        if (navigator.vibrate) {
+          try { navigator.vibrate([180, 90, 180]); } catch (_) {}
+        }
       }
     } catch (_) {}
+  }
+
+  function buildPendingSummaryText(pending) {
+    if (!pending || !pending.length) return '';
+    const lines = pending.slice(0, 6).map((p, i) => `${i + 1}. ${p.name} (${p.folderName})`);
+    const more = pending.length > 6 ? `\n+${pending.length - 6} pendientes más...` : '';
+    return lines.join('\n') + more;
+  }
+
+  let lastNativeSyncSig = '';
+  function syncNativeLoudAlarmBridge(pending) {
+    const bridge = global.EfectivaIdleAlarmBridge;
+    if (!bridge || typeof bridge.syncState !== 'function') return false;
+    const playing = isTaskPlaying();
+    const intervalMin = Math.max(1, Number(config.bgIntervalMin) || 5);
+    const summary = buildPendingSummaryText(pending);
+    const snoozeUntil = Number(config.snoozeUntil) || 0;
+    const sig = `${config.enabled}|${playing}|${intervalMin}|${pending.length}|${snoozeUntil}|${summary.slice(0, 100)}`;
+    if (sig === lastNativeSyncSig) return true;
+    lastNativeSyncSig = sig;
+    try {
+      bridge.syncState(!!config.enabled, !!playing, intervalMin, pending.length, summary, snoozeUntil);
+    } catch (_) {}
+    return true;
+  }
+
+  function getNativePerms() {
+    const bridge = global.EfectivaIdleAlarmBridge;
+    if (!bridge || typeof bridge.getPermissionsStatus !== 'function') return null;
+    try {
+      return JSON.parse(bridge.getPermissionsStatus());
+    } catch (_) {
+      return null;
+    }
   }
 
   function speakPendingSummary(pending) {
@@ -270,7 +327,8 @@
       </div>
       <div class="idle-alarm-banner-actions">
         <button type="button" class="idle-btn-play" id="idleBannerPlayTopBtn">▶ Play</button>
-        <button type="button" class="idle-btn-list" id="idleBannerOpenPanelBtn">📋 Ver todos</button>
+        <button type="button" class="idle-btn-list" id="idleBannerOpenPanelBtn">📋 Ver</button>
+        <button type="button" class="idle-btn-list" id="idleBannerDisableBtn" title="Desactivar alarma perenne">🔕</button>
       </div>
     `;
 
@@ -281,6 +339,15 @@
     banner.querySelector('#idleBannerOpenPanelBtn').onclick = (e) => {
       e.stopPropagation();
       openIdleAlarmPanel();
+    };
+    banner.querySelector('#idleBannerDisableBtn').onclick = (e) => {
+      e.stopPropagation();
+      config.enabled = false;
+      saveConfig();
+      try { global.EfectivaIdleAlarmBridge?.stopRingingNow(); } catch (_) {}
+      cancelNativeIdleNotifications();
+      lastNativeSyncSig = '';
+      evaluateIdleAlarm(true);
     };
   }
 
@@ -320,8 +387,12 @@
 
         <div class="idle-controls-grid">
           <label class="idle-switch-row">
-            <span>Alarma perenne activa</span>
+            <span>🚨 Alarma perenne activa</span>
             <input type="checkbox" id="idleEnabledChk" ${config.enabled ? 'checked' : ''} />
+          </label>
+          <label class="idle-switch-row">
+            <span>📢 Modo escandaloso</span>
+            <input type="checkbox" id="idleLoudChk" ${config.loudMode !== false ? 'checked' : ''} />
           </label>
           <label class="idle-switch-row">
             <span>🗣️ Leer pendientes en voz alta</span>
@@ -330,22 +401,53 @@
           <label class="idle-select-row">
             <span>Sonido en app cada:</span>
             <select id="idleSoundSecSel">
-              ${[10, 15, 30, 60].map(s => `<option value="${s}" ${config.soundEverySec === s ? 'selected' : ''}>${s} seg</option>`).join('')}
+              ${[10, 12, 15, 30, 60].map(s => `<option value="${s}" ${config.soundEverySec === s ? 'selected' : ''}>${s} seg</option>`).join('')}
             </select>
           </label>
           <label class="idle-select-row">
-            <span>Recordatorio 2do plano:</span>
+            <span>Con app cerrada cada:</span>
             <select id="idleBgMinSel">
               ${[1, 2, 5, 10, 15].map(m => `<option value="${m}" ${config.bgIntervalMin === m ? 'selected' : ''}>${m} min</option>`).join('')}
             </select>
           </label>
         </div>
 
+        ${(() => {
+          const perms = getNativePerms();
+          if (perms) {
+            return `
+              <div class="idle-perms-box">
+                <div class="idle-perms-title">🔐 Permisos Android (para sonar con la app cerrada)</div>
+                <div class="idle-perms-list">
+                  <button type="button" class="fin-btn sm" id="permNotifBtn">${perms.notifications ? '✅' : '⚠️'} Notificaciones</button>
+                  <button type="button" class="fin-btn sm" id="permExactBtn">${perms.exactAlarm ? '✅' : '⚠️'} Alarmas exactas</button>
+                  <button type="button" class="fin-btn sm" id="permBatteryBtn">${perms.batteryOptimization ? '✅' : '⚠️'} Sin restricción batería</button>
+                  <button type="button" class="fin-btn sm" id="permFullBtn">${perms.fullScreenIntent ? '✅' : '⚠️'} Pantalla bloqueada</button>
+                </div>
+                <div class="idle-snooze-row" style="margin-top:6px;">
+                  <button type="button" class="fin-btn sm primary" id="idleTestLoudBtn">🔊 Probar alarma escandalosa</button>
+                  <button type="button" class="fin-btn sm danger" id="idleStopLoudBtn">🔇 Silenciar ahora</button>
+                </div>
+              </div>
+            `;
+          }
+          return `
+            <div class="idle-perms-box">
+              <div class="idle-perms-title">📱 Modo Alarma con app cerrada</div>
+              <small style="opacity:0.85;">En APK v40 se habilita el servicio nativo <code>USAGE_ALARM</code> + <code>AlarmManager</code> + <code>BOOT_COMPLETED</code> para sonar escandalosamente incluso con la app cerrada y en silencio.</small>
+              <div class="idle-snooze-row" style="margin-top:6px;">
+                <button type="button" class="fin-btn sm primary" id="idleTestWebLoudBtn">🔊 Probar sonido ahora</button>
+              </div>
+            </div>
+          `;
+        })()}
+
         <div class="idle-snooze-row">
           <button type="button" class="fin-btn sm" data-snooze="15">⏸ 15m</button>
           <button type="button" class="fin-btn sm" data-snooze="30">⏸ 30m</button>
           <button type="button" class="fin-btn sm" data-snooze="60">⏸ 1h</button>
           ${snoozed ? '<button type="button" class="fin-btn sm primary" id="idleResumeNowBtn">▶ Reanudar ya</button>' : ''}
+          <button type="button" class="fin-btn sm danger" id="idleQuickToggleBtn">${config.enabled ? '🔕 Desactivar alarma' : '🚨 Activar alarma'}</button>
         </div>
 
         <div class="idle-pending-header">
@@ -376,11 +478,51 @@
     modal.querySelector('#idleEnabledChk').onchange = (e) => {
       config.enabled = !!e.target.checked;
       if (config.enabled) config.snoozeUntil = 0;
+      lastNativeSyncSig = '';
       saveConfig();
-      if (!config.enabled) cancelNativeIdleNotifications();
+      if (!config.enabled) {
+        try { global.EfectivaIdleAlarmBridge?.stopRingingNow(); } catch (_) {}
+        cancelNativeIdleNotifications();
+      }
       evaluateIdleAlarm(true);
       openIdleAlarmPanel();
     };
+    const loudChk = modal.querySelector('#idleLoudChk');
+    if (loudChk) {
+      loudChk.onchange = (e) => {
+        config.loudMode = !!e.target.checked;
+        saveConfig();
+      };
+    }
+    const quickToggle = modal.querySelector('#idleQuickToggleBtn');
+    if (quickToggle) {
+      quickToggle.onclick = () => {
+        config.enabled = !config.enabled;
+        if (config.enabled) config.snoozeUntil = 0;
+        lastNativeSyncSig = '';
+        saveConfig();
+        if (!config.enabled) {
+          try { global.EfectivaIdleAlarmBridge?.stopRingingNow(); } catch (_) {}
+          cancelNativeIdleNotifications();
+        }
+        evaluateIdleAlarm(true);
+        openIdleAlarmPanel();
+      };
+    }
+    const permNotifBtn = modal.querySelector('#permNotifBtn');
+    if (permNotifBtn) permNotifBtn.onclick = () => { try { global.EfectivaIdleAlarmBridge?.requestNotificationPermission(); } catch (_) {} };
+    const permExactBtn = modal.querySelector('#permExactBtn');
+    if (permExactBtn) permExactBtn.onclick = () => { try { global.EfectivaIdleAlarmBridge?.requestExactAlarmPermission(); } catch (_) {} };
+    const permBatteryBtn = modal.querySelector('#permBatteryBtn');
+    if (permBatteryBtn) permBatteryBtn.onclick = () => { try { global.EfectivaIdleAlarmBridge?.requestIgnoreBatteryOptimizations(); } catch (_) {} };
+    const permFullBtn = modal.querySelector('#permFullBtn');
+    if (permFullBtn) permFullBtn.onclick = () => { try { global.EfectivaIdleAlarmBridge?.requestFullScreenIntentPermission(); } catch (_) {} };
+    const testLoudBtn = modal.querySelector('#idleTestLoudBtn');
+    if (testLoudBtn) testLoudBtn.onclick = () => { try { global.EfectivaIdleAlarmBridge?.triggerTestAlarm(buildPendingSummaryText(pending)); } catch (_) {} };
+    const stopLoudBtn = modal.querySelector('#idleStopLoudBtn');
+    if (stopLoudBtn) stopLoudBtn.onclick = () => { try { global.EfectivaIdleAlarmBridge?.stopRingingNow(); } catch (_) {} };
+    const testWebLoudBtn = modal.querySelector('#idleTestWebLoudBtn');
+    if (testWebLoudBtn) testWebLoudBtn.onclick = () => { playIdleAlarmTone(); };
     modal.querySelector('#idleSpeakChk').onchange = (e) => {
       config.speakPending = !!e.target.checked;
       saveConfig();
@@ -433,13 +575,17 @@
     updateHeaderButton();
     renderPersistentBanner();
 
+    const pending = getAllPendingTasks();
+    const hasNativeLoud = syncNativeLoudAlarmBridge(pending);
+
     if (!shouldAlarmNow()) {
       cancelNativeIdleNotifications();
       return;
     }
 
-    const pending = getAllPendingTasks();
-    scheduleNativeIdleNotifications(pending);
+    if (!hasNativeLoud) {
+      scheduleNativeIdleNotifications(pending);
+    }
 
     const now = Date.now();
     const gracePassed = forceImmediate || (now - lastPlayStoppedAt >= 8000);
