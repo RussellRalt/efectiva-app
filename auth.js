@@ -3,7 +3,16 @@
 (() => {
   const SUPABASE_URL = 'https://uwxopjatesgptsrwyeqr.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_DvGtq7FNsg82Ufny1P1_OA_t-AMIpZU';
-  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const PUBLIC_APP_URL = 'https://russellralt.github.io/efectiva-app/';
+  const NATIVE_CALLBACK_URL = 'com.russellralt.efectiva://auth-callback';
+  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: {
+      flowType: 'pkce',
+      detectSessionInUrl: true,
+      persistSession: true,
+      autoRefreshToken: true
+    }
+  });
   const PENDING_SYNC_PREFIX = 'efectiva_pending_sync_';
   let currentUser = null;
   let syncTimer = null;
@@ -107,7 +116,7 @@
         submit.disabled = true;
         messageEl.textContent = 'Procesando...';
         const result = registerMode
-          ? await client.auth.signUp({ email, password })
+          ? await client.auth.signUp({ email, password, options: { emailRedirectTo: PUBLIC_APP_URL } })
           : await client.auth.signInWithPassword({ email, password });
         submit.disabled = false;
         if (result.error) {
@@ -123,9 +132,7 @@
       if (googleBtn) {
         googleBtn.addEventListener('click', async () => {
           const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-          const redirectTo = isNative
-            ? 'com.russellralt.efectiva://auth-callback'
-            : (window.location.origin + window.location.pathname);
+          const redirectTo = isNative ? NATIVE_CALLBACK_URL : PUBLIC_APP_URL;
 
           messageEl.textContent = 'Abriendo Google...';
           googleBtn.disabled = true;
@@ -134,7 +141,8 @@
               provider: 'google',
               options: {
                 redirectTo,
-                skipBrowserRedirect: isNative
+                skipBrowserRedirect: isNative,
+                queryParams: { prompt: 'select_account' }
               }
             });
             if (error) {
@@ -168,11 +176,11 @@
           }
           messageEl.textContent = 'Enviando enlace...';
           const { error } = await client.auth.resetPasswordForEmail(email, {
-            redirectTo: 'https://russellralt.github.io/efectiva-app/'
+            redirectTo: PUBLIC_APP_URL
           });
           messageEl.textContent = error
             ? error.message
-            : 'Revisá tu correo: te enviamos un enlace para crear o cambiar tu contraseña.';
+            : 'Revisá tu correo (y la carpeta de Spam): te enviamos el enlace seguro para crear o cambiar tu contraseña.';
         });
       }
     }
@@ -305,14 +313,76 @@
 
   window.addEventListener('online', () => flushPendingSync());
 
-  function showSetNewPasswordPrompt() {
-    const newPass = window.prompt('Recuperación de cuenta: escribí tu nueva contraseña (mínimo 6 caracteres):');
-    if (!newPass || newPass.trim().length < 6) return;
-    client.auth.updateUser({ password: newPass.trim() }).then(({ error }) => {
-      if (error) {
-        alert('No se pudo actualizar la contraseña: ' + error.message);
-      } else {
-        alert('Contraseña actualizada con éxito. Ya podés usarla en la APK y en la web.');
+  function showSetNewPasswordModal() {
+    hideAuth();
+    const prev = document.getElementById('passwordRecoveryModal');
+    if (prev) prev.remove();
+
+    const modal = el(`
+      <div id="passwordRecoveryModal" class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="recoveryTitle">
+        <div class="auth-card">
+          <div class="auth-logo">🔐</div>
+          <h2 id="recoveryTitle">Crear / Cambiar contraseña</h2>
+          <p class="auth-subtitle">Ingresá tu nueva contraseña para acceder desde la web y la APK.</p>
+          <form id="recoveryForm">
+            <label for="recoveryPass1">Nueva contraseña</label>
+            <input id="recoveryPass1" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo 6 caracteres" required>
+            <label for="recoveryPass2">Repetí la contraseña</label>
+            <input id="recoveryPass2" type="password" autocomplete="new-password" minlength="6" placeholder="Repetí tu contraseña" required>
+            <button id="recoverySubmitBtn" type="submit">Guardar nueva contraseña</button>
+          </form>
+          <p id="recoveryMsg" class="auth-message"></p>
+          <div class="auth-links-row">
+            <button id="recoveryCancelBtn" class="auth-link" type="button">Cancelar</button>
+          </div>
+        </div>
+      </div>`);
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+
+    const form = modal.querySelector('#recoveryForm');
+    const p1El = modal.querySelector('#recoveryPass1');
+    const p2El = modal.querySelector('#recoveryPass2');
+    const submitBtn = modal.querySelector('#recoverySubmitBtn');
+    const msgEl = modal.querySelector('#recoveryMsg');
+    const cancelBtn = modal.querySelector('#recoveryCancelBtn');
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        modal.remove();
+      });
+    }
+
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const pass1 = p1El.value.trim();
+      const pass2 = p2El.value.trim();
+      if (pass1.length < 6) {
+        msgEl.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+        return;
+      }
+      if (pass1 !== pass2) {
+        msgEl.textContent = 'Las contraseñas no coinciden.';
+        return;
+      }
+      submitBtn.disabled = true;
+      msgEl.textContent = 'Guardando nueva contraseña...';
+      try {
+        const { error } = await client.auth.updateUser({ password: pass1 });
+        if (error) {
+          msgEl.textContent = 'No se pudo actualizar: ' + error.message;
+          submitBtn.disabled = false;
+          return;
+        }
+        msgEl.textContent = '✅ Contraseña actualizada con éxito. Ya podés usarla en la APK y en la web.';
+        try { history.replaceState({}, '', window.location.pathname); } catch (_) {}
+        setTimeout(() => {
+          modal.remove();
+          window.dispatchEvent(new CustomEvent('efectiva:authenticated'));
+        }, 1100);
+      } catch (err) {
+        msgEl.textContent = 'Error inesperado: ' + (err && err.message ? err.message : String(err));
+        submitBtn.disabled = false;
       }
     });
   }
@@ -323,7 +393,7 @@
       hideAuth();
       flushPendingSync();
       window.dispatchEvent(new CustomEvent('efectiva:authenticated'));
-      setTimeout(showSetNewPasswordPrompt, 400);
+      setTimeout(showSetNewPasswordModal, 250);
       return;
     }
     if (currentUser) {
@@ -335,7 +405,7 @@
     }
   });
 
-  // Capturar retorno de Google OAuth en APK Capacitor
+  // Capturar retorno de Google OAuth / Recuperación en APK Capacitor
   try {
     const CapApp = window.Capacitor?.Plugins?.App;
     const CapBrowser = window.Capacitor?.Plugins?.Browser;
@@ -343,11 +413,13 @@
       CapApp.addListener('appUrlOpen', async ({ url }) => {
         if (!url || !url.includes('auth-callback')) return;
         try { if (CapBrowser && CapBrowser.close) await CapBrowser.close(); } catch (_) {}
+        const isRecovery = url.includes('type=recovery');
         try {
           const parsed = new URL(url);
           const code = parsed.searchParams.get('code');
           if (code && client.auth.exchangeCodeForSession) {
             await client.auth.exchangeCodeForSession(code);
+            if (isRecovery) setTimeout(showSetNewPasswordModal, 350);
             return;
           }
           const hash = parsed.hash ? new URLSearchParams(parsed.hash.replace(/^#/, '')) : null;
@@ -355,6 +427,9 @@
           const refresh_token = hash && hash.get('refresh_token');
           if (access_token && refresh_token) {
             await client.auth.setSession({ access_token, refresh_token });
+            if (isRecovery || (hash && hash.get('type') === 'recovery')) {
+              setTimeout(showSetNewPasswordModal, 350);
+            }
           }
         } catch (err) {
           console.error('Error procesando retorno OAuth:', err);

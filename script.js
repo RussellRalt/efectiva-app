@@ -2071,7 +2071,7 @@ function updateAppVersionBadge() {
   try {
     const el = document.getElementById('appVersionBadge');
     if (!el) return;
-    el.textContent = 'v42 · 🔊';
+    el.textContent = 'v43 · 🔊';
     el.title = 'Efectiva v34 — PiP blindado, Memoria por Nodos y Motor Financiero';
   } catch (_) {}
 }

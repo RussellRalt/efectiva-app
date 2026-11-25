@@ -37,13 +37,13 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
           cp app/build/outputs/apk/debug/app-debug.apk ../efectiva-debug.apk
-          cp app/build/outputs/apk/debug/app-debug.apk ../efectiva-v42.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../efectiva-v43.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: efectiva-v42-apk
-          path: efectiva-v42.apk
+          name: efectiva-v43-apk
+          path: efectiva-v43.apk
 
       - name: Publish APK to GitHub Release (latest)
         env:
@@ -52,4 +52,4 @@ jobs:
           gh release delete latest --yes || true
           git tag -f latest
           git push -f origin latest
-          gh release create latest efectiva-v42.apk efectiva-debug.apk --title "Efectiva Android APK v42 (Barra en vivo Play + Alarma Escandalosa + 2do Plano Real)" --notes "APK v42 con barra en vivo persistente en Modo Play, alarma escandalosa exacta con app cerrada/minimizada, servicio anti-cierre y asistente de permisos Android."
+          gh release create latest efectiva-v43.apk efectiva-debug.apk --title "Efectiva Android APK v43 (Auth PKCE + Cuenta Regresiva en Pantalla de Bloqueo + Alarma Escandalosa)" --notes "APK v43 con flujo OAuth PKCE, recuperación de contraseña sin localhost, cuenta regresiva en vivo en pantalla de bloqueo y alarma escandalosa."

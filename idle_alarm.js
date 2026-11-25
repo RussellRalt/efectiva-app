@@ -505,7 +505,7 @@
 
         ${(() => {
           const perms = getNativePerms();
-          const apkUrl = 'https://github.com/RussellRalt/efectiva-app/releases/latest/download/efectiva-v42.apk';
+          const apkUrl = 'https://github.com/RussellRalt/efectiva-app/releases/latest/download/efectiva-v43.apk';
           if (perms) {
             const hasPlayBridge = !!global.EfectivaPlayBridge;
             return `
@@ -518,11 +518,11 @@
                   <button type="button" class="fin-btn sm" id="permFullBtn">${perms.fullScreenIntent ? '✅' : '⚠️'} Pantalla bloqueada</button>
                   <button type="button" class="fin-btn sm" id="permAppSettingsBtn">⚙️ Ajustes del teléfono</button>
                 </div>
-                <small style="opacity:0.88;">${hasPlayBridge ? '✅ Barra en vivo durante Play activa (APK v42)' : '⚠️ Actualizá a APK v42 para barra en vivo durante Play'}</small>
+                <small style="opacity:0.88;">${hasPlayBridge ? '✅ Barra en vivo durante Play activa (APK v43)' : '⚠️ Actualizá a APK v43 para barra en vivo durante Play'}</small>
                 <div class="idle-snooze-row" style="margin-top:4px;">
                   <button type="button" class="fin-btn sm primary" id="idleTestLoudBtn">🔊 Probar alarma</button>
                   <button type="button" class="fin-btn sm danger" id="idleStopLoudBtn">🔇 Silenciar ahora</button>
-                  ${!hasPlayBridge ? `<a class="fin-btn sm primary" href="${apkUrl}" target="_blank" rel="noopener" style="text-decoration:none;">⬇ Descargar APK v42</a>` : ''}
+                  ${!hasPlayBridge ? `<a class="fin-btn sm primary" href="${apkUrl}" target="_blank" rel="noopener" style="text-decoration:none;">⬇ Descargar APK v43</a>` : ''}
                 </div>
               </div>
             `;
@@ -531,10 +531,10 @@
           if (isOldApk) {
             return `
               <div class="idle-perms-box">
-                <div class="idle-perms-title">Actualización de APK requerida (v42)</div>
-                <small style="opacity:0.9;">Tu APK actual aún no incluye los permisos nativos ni la barra en vivo durante Play. Instalá la APK v42 para que Android no cierre la app al ir a WhatsApp.</small>
+                <div class="idle-perms-title">Actualización de APK requerida (v43)</div>
+                <small style="opacity:0.9;">Tu APK actual aún no incluye los permisos nativos ni la barra en vivo durante Play. Instalá la APK v43 para que Android no cierre la app al ir a WhatsApp.</small>
                 <div class="idle-snooze-row" style="margin-top:6px;">
-                  <a class="fin-btn sm primary" href="${apkUrl}" target="_blank" rel="noopener" style="text-decoration:none;">⬇ Descargar APK v42</a>
+                  <a class="fin-btn sm primary" href="${apkUrl}" target="_blank" rel="noopener" style="text-decoration:none;">⬇ Descargar APK v43</a>
                   <button type="button" class="fin-btn sm" id="idleTestWebLoudBtn">🔊 Probar sonido</button>
                 </div>
               </div>
@@ -543,10 +543,10 @@
           return `
             <div class="idle-perms-box">
               <div class="idle-perms-title">Modo Alarma con app cerrada</div>
-              <small style="opacity:0.85;">Para barra fija en notificaciones y alarma escandalosa al ir a WhatsApp o cerrar la app, instalá la APK Android v42.</small>
+              <small style="opacity:0.85;">Para barra fija en notificaciones y alarma escandalosa al ir a WhatsApp o cerrar la app, instalá la APK Android v43.</small>
               <div class="idle-snooze-row" style="margin-top:6px;">
                 <button type="button" class="fin-btn sm primary" id="idleTestWebLoudBtn">🔊 Probar sonido ahora</button>
-                <a class="fin-btn sm" href="${apkUrl}" target="_blank" rel="noopener" style="text-decoration:none;">📱 Descargar APK v42</a>
+                <a class="fin-btn sm" href="${apkUrl}" target="_blank" rel="noopener" style="text-decoration:none;">📱 Descargar APK v43</a>
               </div>
             </div>
           `;

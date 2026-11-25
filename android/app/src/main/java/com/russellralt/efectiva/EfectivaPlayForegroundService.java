@@ -19,7 +19,7 @@ import androidx.core.app.NotificationCompat;
  * cronómetro nativo en vivo (cuenta regresiva o transcurrida).
  */
 public class EfectivaPlayForegroundService extends Service {
-    public static final String CHANNEL_ID = "efectiva_play_live_v42";
+    public static final String CHANNEL_ID = "efectiva_play_live_v43";
     public static final int NOTIF_ID = 4101;
     public static final String ACTION_UPDATE = "com.russellralt.efectiva.PLAY_LIVE_UPDATE";
     public static final String ACTION_STOP = "com.russellralt.efectiva.PLAY_LIVE_STOP";
@@ -74,9 +74,11 @@ public class EfectivaPlayForegroundService extends Service {
             NotificationChannel ch = new NotificationChannel(
                     CHANNEL_ID,
                     "Presentación en vivo (Modo Play)",
-                    NotificationManager.IMPORTANCE_LOW
+                    NotificationManager.IMPORTANCE_DEFAULT
             );
-            ch.setDescription("Muestra la tarea, paso actual y tiempo restante mientras usás otras apps.");
+            ch.setDescription("Muestra la tarea, paso actual y cuenta regresiva en barra y pantalla de bloqueo.");
+            ch.setSound(null, null);
+            ch.enableVibration(false);
             ch.setShowBadge(false);
             ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -130,6 +132,8 @@ public class EfectivaPlayForegroundService extends Service {
                 .setContentText(shortBody)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(stepText))
                 .setSmallIcon(R.mipmap.ic_launcher)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_PROGRESS)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setSilent(true)
