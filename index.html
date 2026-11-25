@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Efectiva" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=44" />
+  <link rel="stylesheet" href="style.css?v=45" />
   <link rel="manifest" href="manifest.json" />
   <!-- Librería ligera para captura de elementos en imagen PNG HD -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -19,7 +19,7 @@
   <!-- SECCIÓN CARPETAS -->
   <section id="foldersSection">
     <header>
-      <h1 class="app-brand"><span class="app-brand-mark">E</span><span>Efectiva</span><span id="appVersionBadge" class="app-version-pill">v44</span></h1>
+      <h1 class="app-brand"><span class="app-brand-mark">E</span><span>Efectiva</span><span id="appVersionBadge" class="app-version-pill">v45</span></h1>
     </header>
 
     <!-- Contenedor de íconos (tema, importar, finanzas, centro de control, papelera) -->
@@ -184,14 +184,22 @@
       <div class="presentation-bottom-bar">
         <div class="presentation-timer-row">
           <div class="timer" id="timerDisplay">00:00</div>
-          <button id="justifyDelayBtn" class="justify-delay-btn" type="button" style="display: none;" title="Justificar retraso / añadir tiempo">📝 Justificar retraso</button>
+          <button id="justifyDelayBtn" class="justify-delay-btn" type="button" style="display: none;" title="Extender tiempo con justificación">⏱ Extender tiempo</button>
         </div>
         <div id="delayJustifyBox" class="delay-justify-box" style="display: none;">
-          <input id="delayReasonInput" type="text" placeholder="¿Por qué te atrasaste? (ej: Fui por jabón)" maxlength="140" />
+          <div id="delayTimeUpBanner" class="delay-timeup-banner" style="display: none;">⏰ Tiempo cumplido — Elegí extender con motivo o avanzar al siguiente paso</div>
+          <input id="delayReasonInput" type="text" placeholder="¿Por qué necesitás más tiempo? (ej: Fui por jabón)" maxlength="140" />
+          <div class="delay-presets-row">
+            <button type="button" class="delay-preset-btn" data-extra-min="2">+2m</button>
+            <button type="button" class="delay-preset-btn" data-extra-min="5">+5m</button>
+            <button type="button" class="delay-preset-btn" data-extra-min="10">+10m</button>
+            <button type="button" class="delay-preset-btn" data-extra-min="15">+15m</button>
+          </div>
           <div class="delay-justify-actions">
-            <input id="delayExtraMinInput" type="number" min="0" step="1" placeholder="+ min (opcional)" title="Sumar minutos al paso (opcional)" />
-            <button id="saveDelayBtn" type="button" class="delay-save-btn">Guardar</button>
-            <button id="cancelDelayBtn" type="button" class="delay-cancel-btn">Cancelar</button>
+            <input id="delayExtraMinInput" type="number" min="1" step="1" placeholder="+ min" title="Minutos adicionales a planificar" />
+            <button id="saveDelayBtn" type="button" class="delay-save-btn">⏱ Extender</button>
+            <button id="advanceAfterTimeUpBtn" type="button" class="delay-advance-btn">⏭ Siguiente paso</button>
+            <button id="cancelDelayBtn" type="button" class="delay-cancel-btn">✕</button>
           </div>
         </div>
         <div class="presentation-swipe-hint" id="presentationSwipeHint">
@@ -351,22 +359,22 @@
 
   <!-- Supabase: registro, inicio de sesión y sincronización segura -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="auth.js?v=44"></script>
+  <script src="auth.js?v=45"></script>
   <!-- Sistema de modales temáticos (DEBE cargarse antes que el resto) -->
-  <script src="modals.js?v=44"></script>
+  <script src="modals.js?v=45"></script>
   <!-- Motor financiero estructurado multi-moneda (GTQ/USD en centavos) -->
-  <script src="finance.js?v=44"></script>
+  <script src="finance.js?v=45"></script>
   <!-- Módulo de Tablas Genéricas (Excel / Notion ligero) -->
-  <script src="tables.js?v=44"></script>
+  <script src="tables.js?v=45"></script>
   <!-- Vista Visual tipo Excel para el Motor Financiero -->
-  <script src="finance_ui.js?v=44"></script>
+  <script src="finance_ui.js?v=45"></script>
   <!-- Módulo de Notas Modulares y Recordatorios Estructurados -->
-  <script src="notes_modular.js?v=44"></script>
+  <script src="notes_modular.js?v=45"></script>
   <!-- Script principal -->
-  <script src="script.js?v=44"></script>
+  <script src="script.js?v=45"></script>
   <!-- Alarma Perenne Anti-Ociosidad (requiere tarea en Play) -->
-  <script src="idle_alarm.js?v=44"></script>
-  <script src="ai_chat.js?v=44"></script>
+  <script src="idle_alarm.js?v=45"></script>
+  <script src="ai_chat.js?v=45"></script>
   <script>
     if ('serviceWorker' in navigator) {
       const isCapacitorNative = !!(window.EfectivaAndroidBridge || (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()));

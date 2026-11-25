@@ -777,8 +777,9 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
           tarea_nombre: currentPresentationTask.name,
           paso_actual_indice: (typeof currentStepIndex !== 'undefined') ? currentStepIndex : 0,
           total_pasos: (typeof presentationSteps !== 'undefined') ? presentationSteps.length : 0,
-          segundos_restantes: currentPresentationTask.totalTime ? ((typeof currentStepCountdown !== 'undefined') ? currentStepCountdown : 0) : null,
-          en_negativo: !!(currentPresentationTask.totalTime && typeof currentStepCountdown !== 'undefined' && currentStepCountdown < 0),
+          segundos_restantes: currentPresentationTask.totalTime ? Math.max(0, (typeof currentStepCountdown !== 'undefined') ? currentStepCountdown : 0) : null,
+          tiempo_vencido: !!(currentPresentationTask.totalTime && typeof currentStepCountdown !== 'undefined' && currentStepCountdown <= 0),
+          en_negativo: false,
           alarma_sonando: (typeof stepAlarmActive !== 'undefined') ? !!stepAlarmActive : false
         }
       : null;
@@ -1121,8 +1122,8 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
         return { ok: false, error: `Índice de paso inválido: ${paso_indice}` };
       }
       if (typeof logStepDelay !== 'function') return { ok: false, error: 'logStepDelay no disponible' };
-      const overdue = (typeof currentPresentationTask !== 'undefined' && currentPresentationTask && currentPresentationTask.id === tarea_id && typeof currentStepCountdown !== 'undefined' && currentStepCountdown < 0)
-        ? Math.abs(currentStepCountdown)
+      const overdue = (typeof currentPresentationTask !== 'undefined' && currentPresentationTask && currentPresentationTask.id === tarea_id && typeof presentationStepStartedAt !== 'undefined' && presentationStepStartedAt)
+        ? Math.max(0, Math.floor((Date.now() - presentationStepStartedAt) / 1000) - (typeof presentationBaseSeconds !== 'undefined' ? presentationBaseSeconds : 0))
         : 0;
       const entry = logStepDelay(found.task, idx, motivo, minutos_extra || 0, overdue);
       return { ok: true, mensaje: `Retraso registrado en paso ${idx + 1}: "${entry.motivo}".`, registro: entry };

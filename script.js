@@ -2129,7 +2129,7 @@ function updateAppVersionBadge() {
   try {
     const el = document.getElementById('appVersionBadge');
     if (!el) return;
-    el.textContent = 'v44 · 🔊';
+    el.textContent = 'v45 · 🔊';
     el.title = 'Efectiva v34 — PiP blindado, Memoria por Nodos y Motor Financiero';
   } catch (_) {}
 }
@@ -3176,7 +3176,7 @@ function startPresentation(task, restoredState = null) {
       presentationStepStartedAt = restoredState.stepStartedAt;
       presentationAlarmFired = Boolean(restoredState.alarmFired);
       const elapsed = Math.floor((Date.now() - presentationStepStartedAt) / 1000);
-      currentStepCountdown = presentationBaseSeconds - elapsed;
+      currentStepCountdown = Math.max(0, presentationBaseSeconds - elapsed);
     } else {
       presentationBaseSeconds = task.stepTimes[currentStepIndex] || 0;
       presentationStepStartedAt = Date.now();
@@ -3545,7 +3545,7 @@ function advanceStepData() {
   const completedIdx = currentStepIndex;
   const completedText = presentationSteps[completedIdx] || '';
   if (currentPresentationTask && currentPresentationTask.totalTime) {
-    const leftover = currentStepCountdown;
+    const leftover = Math.max(0, currentStepCountdown);
     currentStepIndex++;
     const baseTime = (currentPresentationTask.stepTimes && currentPresentationTask.stepTimes[currentStepIndex]) || 0;
     presentationBaseSeconds = baseTime + leftover;
@@ -3574,9 +3574,9 @@ function retreatStepData() {
   if (currentPresentationTask && currentPresentationTask.totalTime) {
     const currentBaseTime = (currentPresentationTask.stepTimes && currentPresentationTask.stepTimes[currentStepIndex]) || 0;
     currentStepIndex--;
-    const timeUsed = currentBaseTime - currentStepCountdown;
+    const timeUsed = Math.max(0, currentBaseTime - Math.max(0, currentStepCountdown));
     const prevBaseTime = (currentPresentationTask.stepTimes && currentPresentationTask.stepTimes[currentStepIndex]) || 0;
-    presentationBaseSeconds = prevBaseTime - timeUsed;
+    presentationBaseSeconds = Math.max(0, prevBaseTime - timeUsed);
     currentStepCountdown = presentationBaseSeconds;
   } else {
     currentStepIndex--;
@@ -3976,7 +3976,7 @@ function logStepDelay(task, stepIndex, reason, extraMinutes = 0, overdueSeconds 
   };
   task.delayLogs.push(entry);
 
-  // Si el usuario indicó minutos extra, sumarlos al paso y replanificar en vivo
+  // Si el usuario indicó minutos extra, sumarlos al paso y replanificar en vivo sin tiempo negativo
   if (extraMin > 0 && task.totalTime) {
     const extraSec = Math.round(extraMin * 60);
     if (!Array.isArray(task.stepTimes)) task.stepTimes = task.steps.map(() => 0);
@@ -3984,11 +3984,15 @@ function logStepDelay(task, stepIndex, reason, extraMinutes = 0, overdueSeconds 
     task.totalTime += extraSec;
     task.hasCustomStepTimes = true;
     if (currentPresentationTask && currentPresentationTask.id === task.id && currentStepIndex === stepIndex) {
-      presentationBaseSeconds += extraSec;
+      const remainingPos = Math.max(0, currentStepCountdown);
+      presentationBaseSeconds = remainingPos + extraSec;
+      presentationStepStartedAt = Date.now();
+      currentStepCountdown = presentationBaseSeconds;
+      presentationAlarmFired = false;
+      stopStepOvertimeAlarm();
       syncPresentationClock();
       if (currentStepCountdown > 0) {
-        presentationAlarmFired = false;
-        stopStepOvertimeAlarm();
+        scheduleNativeStepAlarm(currentStepCountdown, presentationSteps[currentStepIndex]);
       }
       saveActivePresentationState();
     }
@@ -4000,20 +4004,35 @@ function logStepDelay(task, stepIndex, reason, extraMinutes = 0, overdueSeconds 
 function setupDelayJustificationUI() {
   const justifyBtn = document.getElementById('justifyDelayBtn');
   const box = document.getElementById('delayJustifyBox');
+  const timeUpBanner = document.getElementById('delayTimeUpBanner');
   const reasonInput = document.getElementById('delayReasonInput');
   const extraInput = document.getElementById('delayExtraMinInput');
   const saveBtn = document.getElementById('saveDelayBtn');
+  const advanceBtn = document.getElementById('advanceAfterTimeUpBtn');
   const cancelBtn = document.getElementById('cancelDelayBtn');
   if (!justifyBtn || !box || justifyBtn._setupDone) return;
   justifyBtn._setupDone = true;
 
+  box.querySelectorAll('.delay-preset-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const mins = Number(btn.dataset.extraMin) || 5;
+      if (extraInput) extraInput.value = String(mins);
+      if (reasonInput && !reasonInput.value.trim()) reasonInput.focus();
+    });
+  });
+
   justifyBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    box.style.display = box.style.display === 'none' ? 'flex' : 'none';
-    if (box.style.display === 'flex' && reasonInput) {
-      reasonInput.value = '';
-      if (extraInput) extraInput.value = '';
-      reasonInput.focus();
+    const isOpening = box.style.display === 'none';
+    box.style.display = isOpening ? 'flex' : 'none';
+    if (isOpening) {
+      if (timeUpBanner) timeUpBanner.style.display = (currentStepCountdown <= 0) ? 'block' : 'none';
+      if (reasonInput) {
+        reasonInput.value = '';
+        reasonInput.focus();
+      }
+      if (extraInput && !extraInput.value) extraInput.value = '5';
     }
   });
 
@@ -4024,19 +4043,45 @@ function setupDelayJustificationUI() {
     });
   }
 
+  if (advanceBtn) {
+    advanceBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      box.style.display = 'none';
+      if (timeUpBanner) timeUpBanner.style.display = 'none';
+      stopStepOvertimeAlarm();
+      nextStep(true);
+    });
+  }
+
   if (saveBtn) {
     saveBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (!currentPresentationTask) return;
-      const reason = reasonInput ? reasonInput.value : '';
+      const reason = reasonInput ? reasonInput.value.trim() : '';
       const extraMin = extraInput ? parseFloat(extraInput.value) : 0;
-      const overdueSec = (currentStepCountdown < 0) ? Math.abs(currentStepCountdown) : 0;
-      logStepDelay(currentPresentationTask, currentStepIndex, reason, isNaN(extraMin) ? 0 : extraMin, overdueSec);
+      const isTimeUp = Boolean(currentPresentationTask.totalTime && currentStepCountdown <= 0);
+
+      // Si el tiempo se cumplió (00:00), exigir al menos +1 min para comprar tiempo y callar la alarma
+      if (isTimeUp && (!Number.isFinite(extraMin) || extraMin <= 0)) {
+        if (typeof showVoiceNotice === 'function') {
+          showVoiceNotice('⏱ Elegí cuántos minutos extender (+2m, +5m...) o tocá ⏭ Siguiente paso');
+        }
+        if (extraInput) {
+          extraInput.value = '5';
+          extraInput.focus();
+        }
+        return;
+      }
+
+      const elapsed = presentationStepStartedAt ? Math.floor((Date.now() - presentationStepStartedAt) / 1000) : 0;
+      const overdueSec = Math.max(0, elapsed - (presentationBaseSeconds || 0));
+      logStepDelay(currentPresentationTask, currentStepIndex, reason || 'Extensión de tiempo', isNaN(extraMin) ? 0 : extraMin, overdueSec);
       box.style.display = 'none';
-      justifyBtn.textContent = '✅ Retraso guardado';
+      if (timeUpBanner) timeUpBanner.style.display = 'none';
+      justifyBtn.textContent = `✅ +${extraMin}m planificados`;
       setTimeout(() => {
-        if (justifyBtn) justifyBtn.textContent = '📝 Justificar retraso';
-      }, 2000);
+        if (justifyBtn) justifyBtn.textContent = '⏱ Extender tiempo';
+      }, 2200);
     });
   }
 }
@@ -4140,9 +4185,19 @@ function triggerStepOvertimeAlarm() {
 
   showSilenceAlarmButton(true);
 
+  // Abrir automáticamente el panel de decisión planificada (extender con motivo o avanzar)
+  const box = document.getElementById('delayJustifyBox');
+  const banner = document.getElementById('delayTimeUpBanner');
+  const extraInput = document.getElementById('delayExtraMinInput');
+  if (box && !isPresentationMinimized) {
+    box.style.display = 'flex';
+    if (banner) banner.style.display = 'block';
+    if (extraInput && !extraInput.value) extraInput.value = '5';
+  }
+
   // Notificación del sistema (útil si el teléfono está bloqueado o en otra app)
-  const stepText = presentationSteps[currentStepIndex] || 'Paso actual';
-  const msg = `⏰ Tiempo agotado en: "${stepText}" (contando en negativo)`;
+  const stepText = extractStepText(presentationSteps[currentStepIndex]) || 'Paso actual';
+  const msg = `⏰ Tiempo cumplido en: "${stepText}" — Extendé con motivo o avanzá al siguiente paso`;
   if ('Notification' in window && Notification.permission === 'granted') {
     try {
       if (navigator.serviceWorker && navigator.serviceWorker.ready) {
@@ -4172,50 +4227,36 @@ function stopStepOvertimeAlarm() {
 }
 
 function showSilenceAlarmButton(visible) {
-  let btn = document.getElementById('silenceStepAlarmBtn');
-  if (visible) {
-    if (!btn) {
-      btn = document.createElement('button');
-      btn.id = 'silenceStepAlarmBtn';
-      btn.className = 'silence-alarm-btn';
-      btn.textContent = '🔕 Silenciar alarma';
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        stopStepOvertimeAlarm();
-      });
-      const bottomBar = presentationModal.querySelector('.presentation-bottom-bar');
-      if (bottomBar) bottomBar.prepend(btn);
-    }
-    btn.style.display = 'inline-flex';
-  } else if (btn) {
-    btn.style.display = 'none';
-  }
+  // v45: ya no se permite silenciar para seguir perdiendo el tiempo en negativo;
+  // la alarma se detiene únicamente al extender tiempo con justificación, avanzar de paso o cerrar.
+  const btn = document.getElementById('silenceStepAlarmBtn');
+  if (btn) btn.style.display = 'none';
 }
 
 function syncPresentationClock() {
   if (!presentationOpen || !currentPresentationTask || !presentationStepStartedAt) return;
   const elapsed = Math.floor((Date.now() - presentationStepStartedAt) / 1000);
   if (currentPresentationTask.totalTime) {
-    currentStepCountdown = presentationBaseSeconds - elapsed;
+    const rawRemaining = presentationBaseSeconds - elapsed;
+    currentStepCountdown = Math.max(0, rawRemaining);
+    const isTimeUp = rawRemaining <= 0;
     timerDisplay.textContent = formatTime(currentStepCountdown);
-    const isOverdue = currentStepCountdown <= 0;
-    timerDisplay.classList.toggle('timer-overdue', isOverdue);
+    timerDisplay.classList.remove('timer-overdue');
+    timerDisplay.classList.toggle('timer-timeup', isTimeUp);
     const jBtn = document.getElementById('justifyDelayBtn');
     if (jBtn) {
       jBtn.style.display = 'inline-flex';
-      jBtn.classList.toggle('urgent', isOverdue);
+      jBtn.classList.toggle('urgent', isTimeUp);
     }
-    if (isOverdue && !presentationAlarmFired) {
+    if (isTimeUp && !presentationAlarmFired) {
       triggerStepOvertimeAlarm();
     }
   } else {
     timerSeconds = presentationBaseSeconds + elapsed;
     timerDisplay.textContent = formatTime(timerSeconds);
-    timerDisplay.classList.remove('timer-overdue');
-  const _jBtn = document.getElementById('justifyDelayBtn'); if (_jBtn) _jBtn.style.display = 'none';
-  const _dBox = document.getElementById('delayJustifyBox'); if (_dBox) _dBox.style.display = 'none';
-    const jBtn = document.getElementById('justifyDelayBtn');
-    if (jBtn) jBtn.style.display = 'none';
+    timerDisplay.classList.remove('timer-overdue', 'timer-timeup');
+    const _jBtn = document.getElementById('justifyDelayBtn'); if (_jBtn) _jBtn.style.display = 'none';
+    const _dBox = document.getElementById('delayJustifyBox'); if (_dBox) _dBox.style.display = 'none';
   }
 }
 
@@ -4507,11 +4548,10 @@ function closePresentation(force = false) {
 }
 
 function formatTime(sec) {
-  const isNeg = sec < 0;
-  const abs = Math.abs(Math.trunc(sec));
-  const mins = Math.floor(abs / 60);
-  const secs = abs % 60;
-  return `${isNeg ? '-' : ''}${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  const clamped = Math.max(0, Math.trunc(Number(sec) || 0));
+  const mins = Math.floor(clamped / 60);
+  const secs = clamped % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 /************************************************************************
@@ -5542,8 +5582,9 @@ window.EfectivaStateBridge = {
           paso_actual_indice: (typeof currentStepIndex !== 'undefined') ? currentStepIndex : 0,
           paso_actual_texto: (typeof presentationSteps !== 'undefined' && presentationSteps[currentStepIndex]) ? (presentationSteps[currentStepIndex].text || presentationSteps[currentStepIndex]) : '',
           total_pasos: (typeof presentationSteps !== 'undefined') ? presentationSteps.length : 0,
-          segundos_restantes: currentPresentationTask.totalTime ? ((typeof currentStepCountdown !== 'undefined') ? currentStepCountdown : 0) : null,
-          en_negativo: !!(currentPresentationTask.totalTime && typeof currentStepCountdown !== 'undefined' && currentStepCountdown < 0),
+          segundos_restantes: currentPresentationTask.totalTime ? Math.max(0, (typeof currentStepCountdown !== 'undefined') ? currentStepCountdown : 0) : null,
+          tiempo_vencido: !!(currentPresentationTask.totalTime && typeof currentStepCountdown !== 'undefined' && currentStepCountdown <= 0),
+          en_negativo: false,
           alarma_sonando: (typeof stepAlarmActive !== 'undefined') ? !!stepAlarmActive : false,
           retrasos_registrados: Array.isArray(currentPresentationTask.delayLogs) ? currentPresentationTask.delayLogs : []
         }
