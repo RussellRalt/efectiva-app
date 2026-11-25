@@ -298,6 +298,12 @@ function handleAppBackAction() {
     if (aiClose) aiClose.click();
     return true;
   }
+  const noteEditorModal = document.getElementById('noteEditorModal');
+  if (noteEditorModal) {
+    if (window.EfectivaNotes) window.EfectivaNotes.closeNoteEditor();
+    else noteEditorModal.remove();
+    return true;
+  }
   const idleAlarmModal = document.getElementById('idleAlarmModal');
   if (idleAlarmModal) {
     if (window.EfectivaIdleAlarm) window.EfectivaIdleAlarm.closePanel();
@@ -1039,17 +1045,48 @@ function renderTasks() {
   tasksList.innerHTML = '';
   completedMiniFolderList.innerHTML = '';
 
-  // Renderizar tareas pendientes
-  folder.tasks.forEach(task => tasksList.appendChild(buildPendingTaskItem(folder, task)));
+  const allFolderNotes = (typeof notes !== 'undefined' ? notes : []).filter(n => n.folderId === currentFolderId || !n.folderId);
+  const activeFolderNotes = allFolderNotes.filter(n => !n.archived);
+  const tblRes = (window.EfectivaTables && typeof window.EfectivaTables.listarTablas === 'function')
+    ? window.EfectivaTables.listarTablas({ carpeta_id: currentFolderId, incluir_filas: false })
+    : { tablas: [] };
+  const folderTables = tblRes.tablas || [];
 
-  // Renderizar notas en la misma lista unificada
-  const currentNotes = (typeof notes !== 'undefined' ? notes : []).filter(n => n.folderId === currentFolderId || !n.folderId);
-  currentNotes.forEach(note => tasksList.appendChild(buildNoteItem(note)));
+  let activeViewTab = 'all';
+  if (window.EfectivaNotes && typeof window.EfectivaNotes.buildFolderFilterBar === 'function') {
+    activeViewTab = window.EfectivaNotes.getViewState().tab || 'all';
+    const filterBar = window.EfectivaNotes.buildFolderFilterBar({
+      tasks: folder.tasks.length,
+      notes: activeFolderNotes.length,
+      tables: folderTables.length,
+      pinnedNotes: activeFolderNotes.filter(n => n.pinned).length,
+      reminderNotes: activeFolderNotes.filter(n => n.reminderAt || n.kind === 'recordatorio').length,
+      archivedNotes: allFolderNotes.filter(n => n.archived).length
+    });
+    tasksList.appendChild(filterBar);
+  }
+
+  // Renderizar tareas pendientes
+  if (activeViewTab === 'all' || activeViewTab === 'tasks') {
+    folder.tasks.forEach(task => tasksList.appendChild(buildPendingTaskItem(folder, task)));
+  }
+
+  // Renderizar notas modulares (con fijadas primero, filtros y checklists inline)
+  if (activeViewTab === 'all' || activeViewTab === 'notes') {
+    const currentNotes = (window.EfectivaNotes && typeof window.EfectivaNotes.getFilteredNotesForFolder === 'function')
+      ? window.EfectivaNotes.getFilteredNotesForFolder(currentFolderId)
+      : activeFolderNotes;
+    currentNotes.forEach(note => {
+      const card = (window.EfectivaNotes && typeof window.EfectivaNotes.buildNoteCard === 'function')
+        ? window.EfectivaNotes.buildNoteCard(note)
+        : buildNoteItem(note);
+      tasksList.appendChild(card);
+    });
+  }
 
   // Renderizar tablas genéricas de esta carpeta (Módulo Tablas v36)
-  if (window.EfectivaTables && typeof window.EfectivaTables.listarTablas === 'function') {
-    const tblRes = window.EfectivaTables.listarTablas({ carpeta_id: currentFolderId, incluir_filas: false });
-    (tblRes.tablas || []).forEach(tbl => {
+  if ((activeViewTab === 'all' || activeViewTab === 'tables') && folderTables.length > 0) {
+    folderTables.forEach(tbl => {
       const card = document.createElement('div');
       card.className = 'table-card-item';
       const main = document.createElement('div');
@@ -1189,7 +1226,14 @@ function renderTasks() {
         title: title || 'Sin título',
         content: content,
         folderId: currentFolderId,
-        createdAt: Date.now()
+        kind: 'nota',
+        pinned: false,
+        archived: false,
+        reminderAt: null,
+        items: [],
+        tags: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
       });
       saveNotes();
       newNoteTitleInput.value = '';
@@ -1737,7 +1781,21 @@ function buildPendingTaskItem(folder, task) {
       }
     });
 
-    taskMenu.append(moveMenuItem, scheduleMenuItem, saveTplMenuItem, deleteMenuItem);
+    const toNoteMenuItem = document.createElement('button');
+    toNoteMenuItem.textContent = '📝 Convertir a Nota';
+    toNoteMenuItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      taskMenu.style.display = 'none'; taskMenu.classList.remove('open-up'); taskDiv.classList.remove('menu-open');
+      if (!window.EfectivaNotes) return;
+      if (typeof asistaConfirm === 'function') {
+        asistaConfirm(`¿Convertir "${task.name}" en una Nota Modular? (Los pasos pasarán a ítems de checklist y la tarea original se moverá a la papelera)`, { title: 'Convertir a Nota', confirmText: 'Convertir' })
+          .then(ok => { if (ok) window.EfectivaNotes.convertTaskToNote(folder, task, true); });
+      } else {
+        window.EfectivaNotes.convertTaskToNote(folder, task, true);
+      }
+    });
+
+    taskMenu.append(moveMenuItem, scheduleMenuItem, toNoteMenuItem, saveTplMenuItem, deleteMenuItem);
     taskButtons.append(toggleBtn, colorBtn, playBtn, menuBtn, taskMenu);
   }
 
@@ -2071,7 +2129,7 @@ function updateAppVersionBadge() {
   try {
     const el = document.getElementById('appVersionBadge');
     if (!el) return;
-    el.textContent = 'v43 · 🔊';
+    el.textContent = 'v44 · 🔊';
     el.title = 'Efectiva v34 — PiP blindado, Memoria por Nodos y Motor Financiero';
   } catch (_) {}
 }

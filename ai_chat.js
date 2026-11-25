@@ -855,6 +855,11 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
           tarea_id: n.taskId || null,
           etiquetas: n.tags || [],
           color: n.color || null,
+          kind: n.kind || 'nota',
+          pinned: !!n.pinned,
+          archived: !!n.archived,
+          reminderAt: n.reminderAt || null,
+          items: Array.isArray(n.items) ? n.items : [],
           updatedAt: n.updatedAt || n.createdAt || null
         }
       };
@@ -1907,7 +1912,7 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
       return { ok: true, mensaje: 'Regla de automatización eliminada.' };
     },
 
-    editar_nota({ nota_id, titulo, contenido, etiquetas, carpeta_id, tarea_id }) {
+    editar_nota({ nota_id, titulo, contenido, etiquetas, carpeta_id, tarea_id, kind, pinned, archived, reminderAt, items }) {
       if (typeof notes === 'undefined') return { ok: false, error: 'Sin notas' };
       const note = notes.find(n => n.id === nota_id);
       if (!note) return { ok: false, error: 'Nota no encontrada' };
@@ -1916,14 +1921,29 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
       if (Array.isArray(etiquetas)) note.tags = etiquetas.map(x => String(x));
       if (carpeta_id !== undefined) note.folderId = carpeta_id;
       if (tarea_id !== undefined) note.taskId = tarea_id;
+      if (kind !== undefined) note.kind = String(kind);
+      if (typeof pinned === 'boolean') note.pinned = pinned;
+      if (typeof archived === 'boolean') note.archived = archived;
+      if (reminderAt !== undefined) note.reminderAt = reminderAt || null;
+      if (Array.isArray(items)) {
+        note.items = items.map((it, idx) => (typeof it === 'string'
+          ? { id: '_ni_' + Math.random().toString(36).slice(2, 9), text: it, checked: false, order: idx }
+          : { id: it.id || ('_ni_' + Math.random().toString(36).slice(2, 9)), text: String(it.text || ''), checked: !!it.checked, order: idx }));
+      }
       note.updatedAt = Date.now();
       if (typeof saveNotes === 'function') saveNotes();
+      if (typeof renderTasks === 'function') renderTasks();
       if (typeof renderNotes === 'function') renderNotes();
       return { ok: true, mensaje: `Nota "${note.title}" actualizada.`, nota: note };
     },
 
-    crear_nota({ titulo, contenido, carpeta_id, tarea_id, etiquetas }) {
+    crear_nota({ titulo, contenido = '', carpeta_id, tarea_id, etiquetas, kind, pinned = false, archived = false, reminderAt = null, items = [] }) {
       if (typeof notes === 'undefined') window.notes = [];
+      const normItems = Array.isArray(items)
+        ? items.map((it, idx) => (typeof it === 'string'
+          ? { id: '_ni_' + Math.random().toString(36).slice(2, 9), text: it, checked: false, order: idx }
+          : { id: it.id || ('_ni_' + Math.random().toString(36).slice(2, 9)), text: String(it.text || ''), checked: !!it.checked, order: idx }))
+        : [];
       const note = {
         id: '_' + Math.random().toString(36).substr(2, 9),
         title: titulo,
@@ -1931,17 +1951,25 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
         folderId: carpeta_id || (typeof currentFolderId !== 'undefined' ? currentFolderId : null),
         taskId: tarea_id || null,
         tags: etiquetas || [],
-        createdAt: Date.now()
+        kind: kind || (normItems.length > 0 ? 'lista' : (reminderAt ? 'recordatorio' : 'nota')),
+        pinned: !!pinned,
+        archived: !!archived,
+        reminderAt: reminderAt || null,
+        items: normItems,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
       };
       notes.push(note);
       if (typeof saveNotes === 'function') saveNotes();
+      if (typeof renderTasks === 'function') renderTasks();
       if (typeof renderNotes === 'function') renderNotes();
       return { ok: true, mensaje: `Nota "${titulo}" creada con éxito.`, nota_id: note.id };
     },
 
-    listar_notas({ carpeta_id, tarea_id, incluir_contenido = false } = {}) {
+    listar_notas({ carpeta_id, tarea_id, incluir_contenido = false, incluir_archivadas = false } = {}) {
       const list = (typeof notes !== 'undefined') ? notes : [];
       const res = list.filter(n => {
+        if (!incluir_archivadas && n.archived) return false;
         if (carpeta_id && n.folderId !== carpeta_id) return false;
         if (tarea_id && n.taskId !== tarea_id) return false;
         return true;
@@ -1952,15 +1980,24 @@ REGLAS DE EFICIENCIA (OBLIGATORIAS):
       return {
         ok: true,
         total: res.length,
-        notas: res.map(n => ({
-          id: n.id,
-          title: n.title,
-          folderId: n.folderId || null,
-          taskId: n.taskId || null,
-          tags: Array.isArray(n.tags) ? n.tags : [],
-          updatedAt: n.updatedAt || n.createdAt || null,
-          preview_120_chars: String(n.content || '').replace(/\s+/g, ' ').trim().slice(0, 120)
-        }))
+        notas: res.map(n => {
+          const arr = Array.isArray(n.items) ? n.items : [];
+          return {
+            id: n.id,
+            title: n.title,
+            folderId: n.folderId || null,
+            taskId: n.taskId || null,
+            kind: n.kind || 'nota',
+            pinned: !!n.pinned,
+            archived: !!n.archived,
+            reminderAt: n.reminderAt || null,
+            itemsCount: arr.length,
+            itemsDone: arr.filter(i => i.checked).length,
+            tags: Array.isArray(n.tags) ? n.tags : [],
+            updatedAt: n.updatedAt || n.createdAt || null,
+            preview_120_chars: String(n.content || '').replace(/\s+/g, ' ').trim().slice(0, 120)
+          };
+        })
       };
     },
 
